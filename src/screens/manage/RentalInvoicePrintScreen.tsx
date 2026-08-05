@@ -5,7 +5,6 @@ import {
 } from 'react-native';
 import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
-import { generatePDF } from 'react-native-html-to-pdf';
 import { MaterialIcons as Icon } from '@expo/vector-icons';
 import AppBar from '../../components/AppBar';
 import { useAlert } from '../../components/AppAlert';
@@ -398,9 +397,9 @@ const RentalInvoicePrintScreen: React.FC<Props> = ({ invoice, onBack }) => {
     try {
       setExportingPDF(true);
       const fileName = `RI-${(invoice.invoiceNumber ?? 'invoice').replace(/[^a-zA-Z0-9]/g, '-')}-${Date.now()}`;
-      const result = await generatePDF({ html: buildRentalInvoiceHTML(invoice, machines), fileName, width: 595, height: 842 });
+      const result = await Print.printToFileAsync({ html: buildRentalInvoiceHTML(invoice, machines), width: 595, height: 842 });
       const canShare = await Sharing.isAvailableAsync();
-      if (canShare) await Sharing.shareAsync(result.filePath, { mimeType: 'application/pdf', dialogTitle: `Rental Invoice ${invoice.invoiceNumber}` });
+      if (canShare) await Sharing.shareAsync(result.uri, { mimeType: 'application/pdf', dialogTitle: `Rental Invoice ${invoice.invoiceNumber}` });
     } catch (e: any) {
       showAlert({ type: 'error', title: 'Export Error', message: e?.message ?? 'Failed to export PDF' });
     } finally {

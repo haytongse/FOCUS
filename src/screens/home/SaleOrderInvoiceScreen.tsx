@@ -4,7 +4,6 @@ import {
   ActivityIndicator, Platform,
 } from 'react-native';
 import * as Print from 'expo-print';
-import { generatePDF } from 'react-native-html-to-pdf';
 import * as Sharing from 'expo-sharing';
 import { MaterialIcons as Icon } from '@expo/vector-icons';
 import AppBar from '../../components/AppBar';
@@ -1128,9 +1127,9 @@ const SaleOrderInvoiceScreen: React.FC<Props> = ({ orderId, onBack }) => {
     try {
       setExportingPDF(true);
       const fileName = `INV-${invoiceData.invoiceNumber.replace(/[^a-zA-Z0-9]/g, '-')}-${Date.now()}`;
-      const result = await generatePDF({ html: buildPDFInvoiceHTML(invoiceData), fileName, width: 794, height: 1123 });
+      const result = await Print.printToFileAsync({ html: buildPDFInvoiceHTML(invoiceData), width: 794, height: 1123 });
       const canShare = await Sharing.isAvailableAsync();
-      if (canShare) await Sharing.shareAsync(result.filePath, { mimeType: 'application/pdf', dialogTitle: `Invoice ${invoiceData.invoiceNumber}` });
+      if (canShare) await Sharing.shareAsync(result.uri, { mimeType: 'application/pdf', dialogTitle: `Invoice ${invoiceData.invoiceNumber}` });
     } catch (e: any) {
       if (e?.message !== 'User cancelled') {
         showAlert({ type: 'error', title: 'Export Error', message: e?.message ?? 'Failed to export PDF' });
@@ -1145,9 +1144,9 @@ const SaleOrderInvoiceScreen: React.FC<Props> = ({ orderId, onBack }) => {
     try {
       setSharingTelegram(true);
       const fileName = `INV-${invoiceData.invoiceNumber.replace(/[^a-zA-Z0-9]/g, '-')}-${Date.now()}`;
-      const result = await generatePDF({ html: buildPDFInvoiceHTML(invoiceData), fileName, width: 794, height: 1123 });
+      const result = await Print.printToFileAsync({ html: buildPDFInvoiceHTML(invoiceData), width: 794, height: 1123 });
       const canShare = await Sharing.isAvailableAsync();
-      if (canShare) await Sharing.shareAsync(result.filePath, { mimeType: 'application/pdf', dialogTitle: `Invoice ${invoiceData.invoiceNumber}` });
+      if (canShare) await Sharing.shareAsync(result.uri, { mimeType: 'application/pdf', dialogTitle: `Invoice ${invoiceData.invoiceNumber}` });
     } catch (e: any) {
       if (e?.message !== 'User cancelled') {
         showAlert({ type: 'error', title: 'Telegram Error', message: e?.message ?? 'Failed to share to Telegram' });

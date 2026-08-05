@@ -9,7 +9,7 @@ import {
   Share,
 } from 'react-native';
 import { MaterialIcons as Icon } from '@expo/vector-icons';
-import { generatePDF } from 'react-native-html-to-pdf';
+import * as Print from 'expo-print';
 import Colors from '../../theme/colors';
 import AppText from '../../components/AppText';
 import AppBar from '../../components/AppBar';
@@ -276,8 +276,8 @@ ${(r.otherIncomeExpenses.interestIncome > 0 || r.otherIncomeExpenses.interestExp
       const from = toISO(selectedMonth);
       const to = toISO(new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 0));
       const name = `IncomeStatement-${from}-${to}`;
-      const result = await generatePDF({ html, fileName: name, width: 595, height: 842 });
-      await Share.share({ url: `file://${result.filePath}`, title: 'Income Statement' });
+      const result = await Print.printToFileAsync({ html, width: 595, height: 842 });
+      await Share.share({ url: result.uri, title: 'Income Statement' });
     } catch (err: any) {
       Alert.alert('Export Error', err?.message ?? 'Failed to generate PDF');
     } finally {

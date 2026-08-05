@@ -39,7 +39,7 @@ import {
   ApiProduct,
   ApiCampus,
 } from '../../services/focusApi';
-import { generatePDF } from 'react-native-html-to-pdf';
+import * as Print from 'expo-print';
 import LOGO_BASE64 from '../../logo/logoBase64';
 
 // ─── PDF constants ────────────────────────────────────────────────────────────
@@ -607,8 +607,8 @@ const QuotationListScreen: React.FC<Props> = ({ onBack }) => {
         const html     = buildQuotationHTML([q], productMap, campusMap);
         const refPart  = q.quotationNumber ?? q.quotation_number ?? q.referenceNumber ?? q.ref ?? q.id;
         const name     = `QUO-${refPart.replace(/[^a-zA-Z0-9]/g, '-')}-${Date.now()}`;
-        const result   = await generatePDF({ html, fileName: name, width: 595, height: 842 });
-        await Share.share({ url: `file://${result.filePath}`, title: 'Quotation' });
+        const result   = await Print.printToFileAsync({ html, width: 595, height: 842 });
+        await Share.share({ url: result.uri, title: 'Quotation' });
       }
     } catch (err: any) {
       showAlert({ type: 'error', title: 'Export Error', message: err?.message ?? 'Failed to export PDF' });

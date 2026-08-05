@@ -19,7 +19,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { MaterialIcons as Icon } from '@expo/vector-icons';
 import LottieView from 'lottie-react-native';
 import SignaturePad, { SignaturePadRef } from '../../components/SignaturePad';
-import { generatePDF } from 'react-native-html-to-pdf';
+import * as Print from 'expo-print';
 import Colors from '../../theme/colors';
 import AppText from '../../components/AppText';
 import AppBar from '../../components/AppBar';
@@ -1312,9 +1312,9 @@ const PurchaseOrderListScreen: React.FC<Props> = ({ onBack }) => {
       // po is already the fully resolved previewingPO (vendor merged in openPreview) — no re-fetch needed
       const html = buildPOHTML([po]);
       const name = `${po.poNumber.replace(/[^a-zA-Z0-9]/g, '-')}-${Date.now()}`;
-      const result = await generatePDF({ html, fileName: name, width: 595, height: 842 });
+      const result = await Print.printToFileAsync({ html, width: 595, height: 842 });
       setPrintLoading(false);
-      await Share.share({ url: `file://${result.filePath}`, title: `Purchase Order ${po.poNumber}` });
+      await Share.share({ url: result.uri, title: `Purchase Order ${po.poNumber}` });
     } catch (err: any) {
       setPrintLoading(false);
       Alert.alert('Export Error', err?.message ?? 'Failed to export PDF');
@@ -1335,8 +1335,8 @@ const PurchaseOrderListScreen: React.FC<Props> = ({ onBack }) => {
         try { full = await getPurchaseOrderApi(po.id); } catch {}
         const html = buildPOHTML([full]);
         const name = `${po.poNumber.replace(/[^a-zA-Z0-9]/g, '-')}-${Date.now()}`;
-        const result = await generatePDF({ html, fileName: name, width: 595, height: 842 });
-        await Share.share({ url: `file://${result.filePath}`, title: `Purchase Order ${po.poNumber}` });
+        const result = await Print.printToFileAsync({ html, width: 595, height: 842 });
+        await Share.share({ url: result.uri, title: `Purchase Order ${po.poNumber}` });
       }
     } catch (err: any) {
       showAlert({ type: 'error', title: 'Export Error', message: err?.message ?? 'Failed to export PDF' });

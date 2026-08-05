@@ -11,7 +11,6 @@ import AppText from '../../components/AppText';
 import AppBar from '../../components/AppBar';
 import { tabEvents } from '../../navigation/tabEvents';
 import * as Print from 'expo-print';
-import { generatePDF } from 'react-native-html-to-pdf';
 import LOGO_BASE64 from '../../logo/logoBase64';
 import { buildMultiRentalInvoicesHTML } from '../../utils/rentalInvoiceHtml';
 import {
@@ -504,11 +503,9 @@ const RentalInvoiceListScreen: React.FC<Props> = ({ onBack, onCreate, onView }) 
         ? invFileName(selectedInvoices[0])
         : `rental-invoices-${selectedInvoices.length}-${today}`;
 
-      const result = await generatePDF({ html, fileName, width: 595, height: 842 });
-      const filePath = result.filePath;
-      if (!filePath) throw new Error('PDF generation failed');
+      const result = await Print.printToFileAsync({ html, width: 595, height: 842 });
       const canShare = await Sharing.isAvailableAsync();
-      if (canShare) await Sharing.shareAsync(filePath, { mimeType: 'application/pdf', dialogTitle: `${fileName}.pdf` });
+      if (canShare) await Sharing.shareAsync(result.uri, { mimeType: 'application/pdf', dialogTitle: `${fileName}.pdf` });
     } catch (err: any) {
       if (err?.message !== 'User cancelled' && err?.message !== 'The user did not share') {
         showAlert({ type: 'error', title: 'Share Error', message: err?.message ?? 'Failed to generate PDF' });

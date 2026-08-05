@@ -20,7 +20,6 @@ import AppText from '../../components/AppText';
 import AppBar from '../../components/AppBar';
 import { useAlert } from '../../components/AppAlert';
 import { getSalesOrdersApi, getSalesOrderApi, getAllProductsApi, getCampusesApi, getSaleOrderSignaturesApi, updateSalesOrderStatusApi, createInvoiceHeaderApi, createSalesOrderApi, getUomsApi, ApiSalesOrder, ApiProduct, ApiCampus, ApiUom } from '../../services/focusApi';
-import { generatePDF } from 'react-native-html-to-pdf';
 import * as Print from 'expo-print';
 import LOGO_BASE64 from '../../logo/logoBase64';
 import DatePickerModal from '../../components/DatePickerModal';
@@ -678,8 +677,8 @@ const SaleOrdersListScreen: React.FC<Props> = ({ onBack }) => {
       const refPart   = order.referenceNumber ?? order.ref ?? order.id;
       const nameParts = [campusCode, refPart].filter(Boolean).join('-');
       const name      = `${nameParts.replace(/[^a-zA-Z0-9]/g, '-')}-${Date.now()}`;
-      const result    = await generatePDF({ html, fileName: name, width: 794, height: 1123 });
-      paths.push(result.filePath);
+      const result    = await Print.printToFileAsync({ html, width: 794, height: 1123 });
+      paths.push(result.uri);
     }
     return paths;
   };

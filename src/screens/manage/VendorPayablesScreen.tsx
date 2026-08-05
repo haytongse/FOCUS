@@ -19,7 +19,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons as Icon } from '@expo/vector-icons';
 import LottieView from 'lottie-react-native';
-import { generatePDF } from 'react-native-html-to-pdf';
+import * as Print from 'expo-print';
 import Colors from '../../theme/colors';
 import AppText from '../../components/AppText';
 import AppBar from '../../components/AppBar';
@@ -463,8 +463,8 @@ const VendorPayablesScreen: React.FC<Props> = ({ onBack }) => {
     try {
       const html = buildBillHTML(bill);
       const name = `PVC-${bill.billNo.replace(/[^a-zA-Z0-9]/g, '-')}-${Date.now()}`;
-      const result = await generatePDF({ html, fileName: name, width: 420, height: 595 });
-      await Share.share({ url: `file://${result.filePath}`, title: `Vendor Payable ${bill.billNo}` });
+      const result = await Print.printToFileAsync({ html, width: 420, height: 595 });
+      await Share.share({ url: result.uri, title: `Vendor Payable ${bill.billNo}` });
     } catch (err: any) {
       Alert.alert('Export Error', err?.message ?? 'Failed to generate PDF');
     } finally {

@@ -20,7 +20,6 @@ import {
 import { WebView } from 'react-native-webview';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons as Icon } from '@expo/vector-icons';
-import { generatePDF } from 'react-native-html-to-pdf';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 
@@ -2018,9 +2017,9 @@ const handleExportReceiptPDF = async (header: ApiInvoiceHeader) => {
       const full = await getInvoiceHeaderApi(header.id);
       const html = buildPaymentReceiptHTML(full, campusMap, productMap);
       const name = `RECEIPT-${header.invoiceNumber ?? header.id}-${Date.now()}`.replace(/[^a-zA-Z0-9]/g, '-');
-      const result = await generatePDF({ html, fileName: name, width: 794, height: 1123 });
+      const result = await Print.printToFileAsync({ html, width: 794, height: 1123 });
       setExportingReceiptId(null);
-      await Share.share({ url: `file://${result.filePath}`, title: `Receipt - ${header.invoiceNumber ?? ''}` });
+      await Share.share({ url: result.uri, title: `Receipt - ${header.invoiceNumber ?? ''}` });
     } catch (err: any) {
       showAlert({ type: 'error', title: 'Export Error', message: err?.message ?? 'Failed to export receipt' });
     } finally {
@@ -2037,10 +2036,10 @@ const handleExportReceiptPDF = async (header: ApiInvoiceHeader) => {
         ? buildPaymentReceiptHTML(full, campusMap, productMap)
         : buildInvoiceHeaderHTML(full, campusMap, productMap, false, undefined, uomMap);
       const name = `INV-${(header.invoiceNumber ?? header.id).replace(/[^a-zA-Z0-9]/g, '-')}-${Date.now()}`;
-      const result = await generatePDF({ html, fileName: name, width: 794, height: 1123 });
+      const result = await Print.printToFileAsync({ html, width: 794, height: 1123 });
       setExportingInvoiceId(null);
       const canShare = await Sharing.isAvailableAsync();
-      if (canShare) await Sharing.shareAsync(result.filePath, { mimeType: 'application/pdf', dialogTitle: `Invoice ${header.invoiceNumber ?? ''}` });
+      if (canShare) await Sharing.shareAsync(result.uri, { mimeType: 'application/pdf', dialogTitle: `Invoice ${header.invoiceNumber ?? ''}` });
     } catch (err: any) {
       if (err?.message !== 'User cancelled') {
         showAlert({ type: 'error', title: 'Export Error', message: err?.message ?? 'Failed to export invoice' });
@@ -2059,9 +2058,9 @@ const handleExportReceiptPDF = async (header: ApiInvoiceHeader) => {
         ? buildPaymentReceiptHTML(full, campusMap, productMap)
         : buildInvoiceHeaderHTML(full, campusMap, productMap, false, undefined, uomMap);
       const name = `INV-${(header.invoiceNumber ?? header.id).replace(/[^a-zA-Z0-9]/g, '-')}-${Date.now()}`;
-      const result = await generatePDF({ html, fileName: name, width: 794, height: 1123 });
+      const result = await Print.printToFileAsync({ html, width: 794, height: 1123 });
       const canShare = await Sharing.isAvailableAsync();
-      if (canShare) await Sharing.shareAsync(result.filePath, { mimeType: 'application/pdf', dialogTitle: `Invoice ${header.invoiceNumber ?? ''}` });
+      if (canShare) await Sharing.shareAsync(result.uri, { mimeType: 'application/pdf', dialogTitle: `Invoice ${header.invoiceNumber ?? ''}` });
     } catch (err: any) {
       if (err?.message !== 'User cancelled') {
         showAlert({ type: 'error', title: 'Share Error', message: err?.message ?? 'Failed to share invoice' });
@@ -2082,9 +2081,9 @@ const handleExportReceiptPDF = async (header: ApiInvoiceHeader) => {
       const full = await Promise.all(selected.map(h => getInvoiceHeaderApi(h.id).catch(() => h)));
       const html = buildMergedInvoicesHTML(full, campusMap, productMap, uomMap);
       const name = `INVOICES-MERGED-${Date.now()}`;
-      const result = await generatePDF({ html, fileName: name, width: 794, height: 1123 });
+      const result = await Print.printToFileAsync({ html, width: 794, height: 1123 });
       const canShare = await Sharing.isAvailableAsync();
-      if (canShare) await Sharing.shareAsync(result.filePath, { mimeType: 'application/pdf', dialogTitle: `${selected.length} Invoices` });
+      if (canShare) await Sharing.shareAsync(result.uri, { mimeType: 'application/pdf', dialogTitle: `${selected.length} Invoices` });
     } catch (err: any) {
       if (err?.message !== 'User cancelled') {
         showAlert({ type: 'error', title: 'Export Error', message: err?.message ?? 'Failed to export merged PDF' });
@@ -2105,9 +2104,9 @@ const handleExportReceiptPDF = async (header: ApiInvoiceHeader) => {
       const full = await Promise.all(selected.map(h => getInvoiceHeaderApi(h.id).catch(() => h)));
       const html = buildMergedInvoicesHTML(full, campusMap, productMap, uomMap);
       const name = `INVOICES-MERGED-${Date.now()}`;
-      const result = await generatePDF({ html, fileName: name, width: 794, height: 1123 });
+      const result = await Print.printToFileAsync({ html, width: 794, height: 1123 });
       const canShare = await Sharing.isAvailableAsync();
-      if (canShare) await Sharing.shareAsync(result.filePath, { mimeType: 'application/pdf', dialogTitle: `${selected.length} Invoice${selected.length !== 1 ? 's' : ''}` });
+      if (canShare) await Sharing.shareAsync(result.uri, { mimeType: 'application/pdf', dialogTitle: `${selected.length} Invoice${selected.length !== 1 ? 's' : ''}` });
     } catch (err: any) {
       if (err?.message !== 'User cancelled') {
         showAlert({ type: 'error', title: 'Share Error', message: err?.message ?? 'Failed to share invoices' });
