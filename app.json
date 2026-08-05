@@ -1,4 +1,6 @@
 {
+  "name": "FOCUSAPPLICATION",
+  "displayName": "Focus ERP",
   "expo": {
     "name": "Focus ERP",
     "slug": "focus-erp",
