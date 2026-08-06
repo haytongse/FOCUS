@@ -128,10 +128,12 @@ const ExpensesScreen: React.FC<Props> = ({ onBack }) => {
   const [categories,  setCategories]  = useState<ApiExpenseCategory[]>([]);
   const [catsLoading, setCatsLoading] = useState(false);
   const catsLoaded = useRef(false);
+  const lastTapRef = useRef<Record<string, number>>({});
 
   // ── Confirm dialog ───────────────────────────────────────────────────────────
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [confirmData,    setConfirmData]    = useState<{ title: string; message: string; amountCents: number } | null>(null);
+  const [pendingDelete,  setPendingDelete]  = useState<ApiExpense | null>(null);
 
   // ── Form state ───────────────────────────────────────────────────────────────
   const [editingId,    setEditingId]    = useState<string | null>(null);
@@ -242,6 +244,17 @@ const ExpensesScreen: React.FC<Props> = ({ onBack }) => {
     setScreenView('form');
   };
 
+  const handleDoubleTap = useCallback((item: ApiExpense) => {
+    const now = Date.now();
+    const last = lastTapRef.current[item.id] ?? 0;
+    if (now - last < 350) {
+      openEdit(item);
+      lastTapRef.current[item.id] = 0;
+    } else {
+      lastTapRef.current[item.id] = now;
+    }
+  }, []); // eslint-disable-line
+
   // ── Proof image picker ───────────────────────────────────────────────────────
   const handlePickProof = (source: 'camera' | 'gallery') => {
     setShowProofMenu(false);
@@ -334,25 +347,20 @@ const ExpensesScreen: React.FC<Props> = ({ onBack }) => {
 
   // ── Delete ───────────────────────────────────────────────────────────────────
   const handleDelete = (expense: ApiExpense) => {
-    Alert.alert(
-      'Delete Expense',
-      `Delete ${expense.categoryNameEn ?? 'this expense'} (${fmtMoney(expense.amountCents)})?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete', style: 'destructive',
-          onPress: async () => {
-            setDeleting(expense.id);
-            try {
-              await deleteExpenseApi(expense.id);
-              setExpenses(prev => prev.filter(e => e.id !== expense.id));
-            } catch (err: any) {
-              Alert.alert('Error', err?.message ?? 'Failed to delete');
-            } finally { setDeleting(null); }
-          },
-        },
-      ],
-    );
+    setPendingDelete(expense);
+  };
+
+  const executeDelete = async () => {
+    if (!pendingDelete) return;
+    const expense = pendingDelete;
+    setPendingDelete(null);
+    setDeleting(expense.id);
+    try {
+      await deleteExpenseApi(expense.id);
+      setExpenses(prev => prev.filter(e => e.id !== expense.id));
+    } catch (err: any) {
+      Alert.alert('Error', err?.message ?? 'Failed to delete');
+    } finally { setDeleting(null); }
   };
 
   // ── Filtered categories ──────────────────────────────────────────────────────
@@ -373,76 +381,67 @@ const ExpensesScreen: React.FC<Props> = ({ onBack }) => {
     const isDeleting = deleting === item.id;
     return (
       <View style={styles.rowWrap}>
-        <View style={styles.rowMain}>
+        <TouchableOpacity activeOpacity={0.95} onPress={() => handleDoubleTap(item)}>
+          <View style={styles.rowMain}>
 
-          {/* Category icon box */}
-          <View style={[styles.catIconBox, { backgroundColor: `${color}20` }]}>
-            <Icon name={categoryIcon(item.categoryKey)} size={20} color={color} />
-          </View>
+            {/* Category icon box */}
+            <View style={[styles.catIconBox, { backgroundColor: `${color}20` }]}>
+              <Icon name={categoryIcon(item.categoryKey)} size={20} color={color} />
+            </View>
 
-          {/* Body */}
-          <View style={styles.rowBody}>
-            <AppText style={styles.catName} numberOfLines={1}>
-              {item.categoryNameEn ?? item.categoryKey ?? '—'}
-            </AppText>
-            {item.vendor ? (
-              <AppText style={styles.vendorText} numberOfLines={1}>{item.vendor}</AppText>
-            ) : null}
-            <View style={styles.rowMeta}>
-              <View style={styles.dateBadge}>
-                <Icon name="event" size={10} color={Colors.textSecondary} />
-                <AppText style={styles.dateText}>{fmtDate(item.paidAt)}</AppText>
+            {/* Body */}
+            <View style={styles.rowBody}>
+              <AppText style={styles.catName} numberOfLines={1}>
+                {item.categoryNameEn ?? item.categoryKey ?? '—'}
+              </AppText>
+              {item.vendor ? (
+                <AppText style={styles.vendorText} numberOfLines={1}>{item.vendor}</AppText>
+              ) : null}
+              <View style={styles.rowMeta}>
+                <View style={styles.dateBadge}>
+                  <Icon name="event" size={10} color={Colors.textSecondary} />
+                  <AppText style={styles.dateText}>{fmtDate(item.paidAt)}</AppText>
+                </View>
+                {item.createdByName ? (
+                  <AppText style={styles.metaChip}>By: {item.createdByName}</AppText>
+                ) : null}
               </View>
-              {item.createdByName ? (
-                <AppText style={styles.metaChip}>By: {item.createdByName}</AppText>
+              {item.description ? (
+                <AppText style={styles.descText} numberOfLines={1}>{item.description}</AppText>
               ) : null}
             </View>
-            {item.description ? (
-              <AppText style={styles.descText} numberOfLines={1}>{item.description}</AppText>
-            ) : null}
+
+            {/* Right: amount + receipt thumb */}
+            <View style={styles.rowRight}>
+              <AppText style={styles.rowAmount}>{fmtMoney(item.amountCents)}</AppText>
+              {item.proofUrl ? (
+                <TouchableOpacity
+                  onPress={() => setPreviewUrl(item.proofUrl!)}
+                  activeOpacity={0.8}
+                  style={{ position: 'relative' }}
+                >
+                  <Image source={{ uri: item.proofUrl }} style={styles.rowReceiptThumb} resizeMode="cover" />
+                  <View style={styles.rowReceiptBadge}>
+                    <Icon name="zoom-in" size={11} color="#fff" />
+                  </View>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+
           </View>
+        </TouchableOpacity>
 
-          {/* Right: amount + receipt thumb */}
-          <View style={styles.rowRight}>
-            <AppText style={styles.rowAmount}>{fmtMoney(item.amountCents)}</AppText>
-            {item.proofUrl ? (
-              <TouchableOpacity
-                onPress={() => setPreviewUrl(item.proofUrl!)}
-                activeOpacity={0.8}
-                style={{ position: 'relative' }}
-              >
-                <Image source={{ uri: item.proofUrl }} style={styles.rowReceiptThumb} resizeMode="cover" />
-                <View style={styles.rowReceiptBadge}>
-                  <Icon name="zoom-in" size={11} color="#fff" />
-                </View>
-              </TouchableOpacity>
-            ) : null}
-          </View>
-
-        </View>
-
-        {/* Action buttons */}
+        {/* Delete button */}
         <View style={styles.cardActionRow}>
           <TouchableOpacity
-            style={[styles.cardActionBtn, { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }]}
-            onPress={() => openEdit(item)}
-            activeOpacity={0.7}
-          >
-            <Icon name="edit" size={13} color={Colors.primary} />
-            <AppText style={[styles.cardActionText, { color: Colors.primary }]}>Edit</AppText>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.cardActionBtn, { backgroundColor: '#FEF2F2', borderColor: '#FECACA' }]}
+            style={styles.actionBtnDelete}
             onPress={() => handleDelete(item)}
             disabled={isDeleting}
-            activeOpacity={0.7}
+            activeOpacity={0.75}
           >
             {isDeleting
               ? <ActivityIndicator size="small" color={Colors.error} />
-              : <>
-                  <Icon name="delete-outline" size={13} color={Colors.error} />
-                  <AppText style={[styles.cardActionText, { color: Colors.error }]}>Delete</AppText>
-                </>}
+              : <Icon name="delete-outline" size={16} color={Colors.error} />}
           </TouchableOpacity>
         </View>
       </View>
@@ -885,6 +884,42 @@ const ExpensesScreen: React.FC<Props> = ({ onBack }) => {
         onClose={() => setDatePicker(null)}
       />
 
+      {/* Delete confirmation modal */}
+      <Modal
+        visible={pendingDelete !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPendingDelete(null)}
+      >
+        <View style={styles.confirmOverlay}>
+          <View style={styles.confirmCard}>
+            <View style={[styles.confirmLottieWrap, { backgroundColor: '#FEF2F2' }]}>
+              <Icon name="delete-forever" size={40} color={Colors.error} />
+            </View>
+            <AppText style={styles.confirmTitle}>Delete Expense?</AppText>
+            <AppText style={styles.confirmMessage}>
+              {`${pendingDelete?.categoryNameEn ?? 'This expense'} (${fmtMoney(pendingDelete?.amountCents ?? 0)}) will be permanently removed.`}
+            </AppText>
+            <View style={styles.confirmRow}>
+              <TouchableOpacity
+                style={styles.confirmCancelBtn}
+                onPress={() => setPendingDelete(null)}
+                activeOpacity={0.7}
+              >
+                <AppText style={styles.confirmCancelText}>Cancel</AppText>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.confirmOkBtn, { backgroundColor: Colors.error }]}
+                onPress={executeDelete}
+                activeOpacity={0.85}
+              >
+                <AppText style={styles.confirmOkText}>Delete</AppText>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Full-screen image preview */}
       <Modal
         visible={previewUrl !== null}
@@ -988,52 +1023,91 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: Colors.error,
+    backgroundColor: Colors.primary,
     marginHorizontal: 16,
-    marginTop: 10,
-    marginBottom: 4,
-    borderRadius: 14,
-    padding: 14,
+    marginTop: 12,
+    marginBottom: 8,
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
   },
-  summaryLabel:   { color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '500', marginBottom: 2 },
-  summaryAmount:  { color: '#fff', fontSize: 22, fontWeight: '800' },
+  summaryLabel:   { color: 'rgba(255,255,255,0.6)', fontSize: 11, fontWeight: '600', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 4 },
+  summaryAmount:  { color: '#fff', fontSize: 28, fontWeight: '800', letterSpacing: -0.5 },
   summaryIconWrap: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    width: 52, height: 52, borderRadius: 26,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center', justifyContent: 'center',
   },
 
   // ── List ──────────────────────────────────────────────────────────────────────
-  list: { paddingBottom: 100 },
+  list: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 100 },
   loadMoreWrap: { padding: 16, alignItems: 'center' },
-  rowWrap: { backgroundColor: Colors.surface, borderBottomWidth: 1, borderBottomColor: Colors.divider },
-  rowMain: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 13, gap: 10 },
-  catIconBox: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  rowBody: { flex: 1, gap: 3 },
-  catName: { fontSize: 14, fontWeight: '700', color: Colors.text },
+  rowWrap: {
+    backgroundColor: Colors.surface,
+    borderRadius: 18,
+    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 8,
+    elevation: 3,
+    overflow: 'hidden',
+  },
+  rowMain: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12 },
+  catIconBox: { width: 46, height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  rowBody: { flex: 1, gap: 4 },
+  catName: { fontSize: 15, fontWeight: '700', color: Colors.text, letterSpacing: -0.1 },
   vendorText: { fontSize: 12, fontWeight: '500', color: Colors.textSecondary },
-  rowMeta: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 5 },
-  dateBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: Colors.background, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 },
-  dateText: { fontSize: 11, color: Colors.textSecondary },
-  metaChip: { fontSize: 11, color: Colors.textSecondary },
-  descText: { fontSize: 11, color: Colors.textSecondary, fontStyle: 'italic' },
-  rowRight: { alignItems: 'flex-end', gap: 6 },
-  rowAmount: { fontSize: 15, fontWeight: '800', color: Colors.error },
-  cardActionRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingBottom: 12, paddingTop: 2 },
-  cardActionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 8, borderRadius: 10, borderWidth: 1 },
-  cardActionText: { fontSize: 12, fontWeight: '700' },
+  rowMeta: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 },
+  dateBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: Colors.background,
+    borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3,
+    borderWidth: 1, borderColor: Colors.border,
+  },
+  dateText: { fontSize: 11, fontWeight: '600', color: Colors.textSecondary },
+  metaChip: { fontSize: 11, color: Colors.textSecondary, fontWeight: '500' },
+  descText: { fontSize: 11, color: Colors.textSecondary, fontStyle: 'italic', lineHeight: 16 },
+  rowRight: { alignItems: 'flex-end', gap: 8 },
+  rowAmount: { fontSize: 17, fontWeight: '800', color: '#DC2626', letterSpacing: -0.3 },
+  cardActionRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingBottom: 14,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: Colors.divider,
+  },
+  actionBtnDelete: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1.5,
+    borderColor: Colors.error,
+    backgroundColor: '#FEF2F2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   rowReceiptThumb: {
-    width: 56,
-    height: 56,
-    borderRadius: 8,
+    width: 52,
+    height: 52,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: Colors.border,
   },
   rowReceiptBadge: {
     position: 'absolute',
-    bottom: 2,
-    right: 2,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    bottom: 3,
+    right: 3,
+    backgroundColor: 'rgba(0,0,0,0.6)',
     borderRadius: 8,
     width: 18,
     height: 18,

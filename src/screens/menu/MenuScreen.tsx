@@ -14,7 +14,9 @@ import {
   RefreshControl,
   Animated,
   Easing,
+  Alert,
 } from 'react-native';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useAlert } from '../../components/AppAlert';
 import { ALL_GROUP_ID } from '../../viewmodels/useMenuViewModel';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -178,6 +180,15 @@ const ItemCard: React.FC<{
   const [editing, setEditing] = useState(false);
   const showImage = !!item.primaryImageUrl && !imgError;
   const inCart = quantity > 0;
+  const addScale = useRef(new Animated.Value(1)).current;
+
+  const handleAddPress = () => {
+    Animated.sequence([
+      Animated.spring(addScale, { toValue: 0.75, useNativeDriver: true, speed: 50, bounciness: 0 }),
+      Animated.spring(addScale, { toValue: 1, useNativeDriver: true, speed: 12, bounciness: 18 }),
+    ]).start();
+    onAdd(item);
+  };
 
   const handleQtyFocus = () => {
     setQtyInput(String(quantity));
@@ -277,7 +288,7 @@ const ItemCard: React.FC<{
 
         {/* Price + onhand + cart controls */}
         <View style={styles.itemCardBottom}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flex: 1, marginRight: 4 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <AppText style={styles.itemPrice}>${item.price.toFixed(2)}</AppText>
             {item.qtyOnHand !== undefined && (
               <View style={styles.itemOnhandRow}>
@@ -290,12 +301,10 @@ const ItemCard: React.FC<{
           </View>
 
           {item.available && !inCart && (
-            <TouchableOpacity
-              style={styles.addBtn}
-              onPress={() => onAdd(item)}
-              activeOpacity={0.8}
-            >
-              <Icon name="add" size={20} color={Colors.white} />
+            <TouchableOpacity onPress={handleAddPress} activeOpacity={1}>
+              <Animated.View style={[styles.addBtn, { transform: [{ scale: addScale }] }]}>
+                <Icon name="add" size={20} color={Colors.white} />
+              </Animated.View>
             </TouchableOpacity>
           )}
 
@@ -524,6 +533,25 @@ const MenuScreen: React.FC<{ user?: User | null }> = ({ user }) => {
   const [pendingSubmit, setPendingSubmit]         = useState(false);
   const sigRef = useRef<SignaturePadRef>(null);
   const [search, setSearch] = useState('');
+  const [showScanner, setShowScanner] = useState(false);
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const scanCooldown = useRef(false);
+
+  const openScanner = async () => {
+    if (!cameraPermission?.granted) {
+      const { granted } = await requestCameraPermission();
+      if (!granted) { Alert.alert('Permission required', 'Camera access is needed to scan barcodes.'); return; }
+    }
+    setShowScanner(true);
+  };
+
+  const handleBarcodeScan = ({ data }: { data: string }) => {
+    if (scanCooldown.current) return;
+    scanCooldown.current = true;
+    setShowScanner(false);
+    setSearch(data.trim());
+    setTimeout(() => { scanCooldown.current = false; }, 1500);
+  };
   const [importVisible, setImportVisible] = useState(false);
   const [importRows, setImportRows] = useState<Array<{ barcode: string; qty: string; discount: string }>>([{ barcode: '', qty: '', discount: '' }]);
   const pendingImportDiscountsRef = useRef<Record<string, string>>({});
@@ -884,6 +912,15 @@ const MenuScreen: React.FC<{ user?: User | null }> = ({ user }) => {
                 returnKeyType="search"
                 clearButtonMode="while-editing"
               />
+              {search ? (
+                <TouchableOpacity onPress={() => setSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ paddingRight: 8 }}>
+                  <Icon name="close" size={16} color={Colors.textSecondary} />
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity onPress={openScanner} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ paddingRight: 8 }}>
+                  <Icon name="qr-code-scanner" size={18} color={Colors.primary} />
+                </TouchableOpacity>
+              )}
             </View>
             <TouchableOpacity
               style={styles.importBtn}
@@ -1776,6 +1813,25 @@ const MenuScreen: React.FC<{ user?: User | null }> = ({ user }) => {
         onClose={() => setInvDatePickerFor(null)}
       />
 
+      {/* Barcode scanner modal */}
+      <Modal visible={showScanner} animationType="slide" onRequestClose={() => setShowScanner(false)}>
+        <View style={styles.scannerRoot}>
+          <CameraView
+            style={styles.scannerCamera}
+            facing="back"
+            barcodeScannerSettings={{ barcodeTypes: ['qr', 'ean13', 'ean8', 'code128', 'code39', 'upc_a', 'upc_e', 'aztec', 'pdf417', 'datamatrix'] }}
+            onBarcodeScanned={handleBarcodeScan}
+          />
+          <View style={styles.scannerOverlay}>
+            <View style={styles.scannerFrame} />
+            <AppText style={styles.scannerHint}>Point at a product barcode or QR code</AppText>
+          </View>
+          <TouchableOpacity style={styles.scannerClose} onPress={() => setShowScanner(false)}>
+            <Icon name="close" size={28} color="#fff" />
+          </TouchableOpacity>
+        </View>
+      </Modal>
+
     </View>
   );
 };
@@ -2059,10 +2115,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   itemCardBottom: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 2,
+    flexDirection: 'column',
+    marginTop: 4,
+    gap: 8,
   },
   unavailableBadge: {
     backgroundColor: Colors.errorLight,
@@ -2101,7 +2156,6 @@ const styles = StyleSheet.create({
 
   // Add button (qty = 0)
   addBtn: {
-    width: 32,
     height: 32,
     borderRadius: 16,
     backgroundColor: Colors.primary,
@@ -2118,6 +2172,7 @@ const styles = StyleSheet.create({
   qtyPill: {
     flexDirection: 'row',
     alignItems: 'center',
+    alignSelf: 'stretch',
     backgroundColor: Colors.primary,
     borderRadius: 16,
     overflow: 'hidden',
@@ -2135,7 +2190,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   qtyPillInput: {
-    minWidth: 28,
+    flex: 1,
     height: 32,
     textAlign: 'center',
     fontSize: 18,
@@ -3280,6 +3335,26 @@ const styles = StyleSheet.create({
     width: '100%',
   },
 
+  scannerRoot:   { flex: 1, backgroundColor: '#000' },
+  scannerCamera: { flex: 1 },
+  scannerOverlay: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  scannerFrame: {
+    width: 260, height: 260, borderRadius: 16,
+    borderWidth: 3, borderColor: '#fff',
+  },
+  scannerHint: {
+    marginTop: 24, color: '#fff', fontSize: 14, fontWeight: '600',
+    textAlign: 'center', textShadowColor: 'rgba(0,0,0,0.8)', textShadowRadius: 4,
+  },
+  scannerClose: {
+    position: 'absolute', top: 52, right: 20,
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center', justifyContent: 'center',
+  },
 });
 
 export default MenuScreen;

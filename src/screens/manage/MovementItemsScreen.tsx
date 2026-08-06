@@ -8,7 +8,9 @@ import {
   RefreshControl,
   TextInput,
   Modal,
+  Alert,
 } from 'react-native';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import XLSX from 'xlsx';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
@@ -98,6 +100,27 @@ const MovementItemsScreen: React.FC<Props> = ({ onBack }) => {
   const [showVendorModal, setShowVendorModal] = useState(false);
   const [showLocModal,    setShowLocModal]    = useState(false);
   const [datePicker, setDatePicker] = useState<'from' | 'to' | null>(null);
+
+  // ── Barcode scanner ───────────────────────────────────────────────────────────
+  const [showScanner, setShowScanner] = useState(false);
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const scanCooldown = useRef(false);
+
+  const openScanner = async () => {
+    if (!cameraPermission?.granted) {
+      const { granted } = await requestCameraPermission();
+      if (!granted) { Alert.alert('Permission required', 'Camera access is needed to scan barcodes.'); return; }
+    }
+    setShowScanner(true);
+  };
+
+  const handleBarcodeScan = ({ data }: { data: string }) => {
+    if (scanCooldown.current) return;
+    scanCooldown.current = true;
+    setShowScanner(false);
+    setSkuInput(data.trim());
+    setTimeout(() => { scanCooldown.current = false; }, 1500);
+  };
 
   // ── Load reference data on mount ──────────────────────────────────────────────
   useEffect(() => {
@@ -563,12 +586,14 @@ const MovementItemsScreen: React.FC<Props> = ({ onBack }) => {
       {/* ── Filter bar ──────────────────────────────────────────────────────── */}
       <View style={styles.filterBar}>
         <View style={styles.inputRow}>
-          <Icon name="qr-code" size={16} color={Colors.textSecondary} />
+          <TouchableOpacity onPress={openScanner} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Icon name="qr-code-scanner" size={20} color={Colors.primary} />
+          </TouchableOpacity>
           <TextInput
             style={styles.textInput}
             value={skuInput}
             onChangeText={setSkuInput}
-            placeholder="Enter SKU…"
+            placeholder="Enter or scan SKU…"
             placeholderTextColor={Colors.textLight}
             autoCapitalize="characters"
             returnKeyType="search"
@@ -741,6 +766,25 @@ const MovementItemsScreen: React.FC<Props> = ({ onBack }) => {
         onSelect={id => { setSelLocation(locations.find(l => String(l.id) === String(id)) ?? null); setLocationSearch(''); }}
         onClear={() => setSelLocation(null)}
       />
+
+      {/* ── Barcode scanner modal ────────────────────────────────────────────── */}
+      <Modal visible={showScanner} animationType="slide" onRequestClose={() => setShowScanner(false)}>
+        <View style={styles.scannerRoot}>
+          <CameraView
+            style={styles.scannerCamera}
+            facing="back"
+            barcodeScannerSettings={{ barcodeTypes: ['qr', 'ean13', 'ean8', 'code128', 'code39', 'upc_a', 'upc_e', 'aztec', 'pdf417', 'datamatrix'] }}
+            onBarcodeScanned={handleBarcodeScan}
+          />
+          <View style={styles.scannerOverlay}>
+            <View style={styles.scannerFrame} />
+            <AppText style={styles.scannerHint}>Point at a barcode or QR code</AppText>
+          </View>
+          <TouchableOpacity style={styles.scannerClose} onPress={() => setShowScanner(false)}>
+            <Icon name="close" size={28} color="#fff" />
+          </TouchableOpacity>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -887,6 +931,29 @@ const styles = StyleSheet.create({
   sheetRowPrimary: { fontSize: 14, fontWeight: '600', color: Colors.text },
   sheetRowSub:     { fontSize: 11, color: Colors.textSecondary, marginTop: 1 },
   sheetCenter:     { padding: 24, alignItems: 'center' },
+
+  // ── Barcode scanner ───────────────────────────────────────────────────────────
+  scannerRoot:   { flex: 1, backgroundColor: '#000' },
+  scannerCamera: { flex: 1 },
+  scannerOverlay: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  scannerFrame: {
+    width: 260, height: 260, borderRadius: 16,
+    borderWidth: 3, borderColor: '#fff',
+    shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 10,
+  },
+  scannerHint: {
+    marginTop: 24, color: '#fff', fontSize: 14, fontWeight: '600',
+    textAlign: 'center', textShadowColor: 'rgba(0,0,0,0.8)', textShadowRadius: 4,
+  },
+  scannerClose: {
+    position: 'absolute', top: 52, right: 20,
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center', justifyContent: 'center',
+  },
 });
 
 export default MovementItemsScreen;

@@ -1383,6 +1383,7 @@ const PurchaseOrderListScreen: React.FC<Props> = ({ onBack }) => {
     const canEdit = item.status === 'DRAFT';
     const canReceive = item.status === 'SENT';
     const canOpenDetail = item.status !== 'BILLED' && item.status !== 'PAID';
+    const isReceived = item.status === 'RECEIVED';
 
     const isExpanded = expandedPoId === String(item.id);
     const imgCount = item.imageCount ?? 0;
@@ -1468,15 +1469,33 @@ const PurchaseOrderListScreen: React.FC<Props> = ({ onBack }) => {
           </View>
           {/* Action row */}
           <View style={styles.cardActionRow}>
-            <TouchableOpacity
-              style={[styles.cardActionBtn, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0', opacity: canReceive ? 1 : 0.35 }]}
-              onPress={() => openDetailReceive(item)}
-              activeOpacity={0.7}
-              disabled={!canReceive}
-            >
-              <Icon name="move-to-inbox" size={13} color="#16A34A" />
-              <AppText style={[styles.cardActionText, { color: '#16A34A' }]}>Receive</AppText>
-            </TouchableOpacity>
+            {isReceived ? (
+              <View style={styles.completedBadge}>
+                <Icon name="check-circle" size={14} color="#16A34A" />
+                <AppText style={styles.completedText}>Status: Completed</AppText>
+              </View>
+            ) : (
+              <>
+                <TouchableOpacity
+                  style={[styles.cardActionBtn, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0', opacity: canReceive ? 1 : 0.35 }]}
+                  onPress={() => openDetailReceive(item)}
+                  activeOpacity={0.7}
+                  disabled={!canReceive}
+                >
+                  <Icon name="move-to-inbox" size={13} color="#16A34A" />
+                  <AppText style={[styles.cardActionText, { color: '#16A34A' }]}>Receive</AppText>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.cardActionBtn, { backgroundColor: '#F5F3FF', borderColor: '#DDD6FE', opacity: canOpenDetail ? 1 : 0.35 }]}
+                  onPress={() => openDetail(item)}
+                  activeOpacity={0.7}
+                  disabled={!canOpenDetail}
+                >
+                  <Icon name="open-in-new" size={13} color="#7C3AED" />
+                  <AppText style={[styles.cardActionText, { color: '#7C3AED' }]}>Details</AppText>
+                </TouchableOpacity>
+              </>
+            )}
             <TouchableOpacity
               style={[styles.cardActionBtn, { backgroundColor: '#FFF7ED', borderColor: '#FED7AA' }]}
               onPress={() => openPreview(item)}
@@ -1484,15 +1503,6 @@ const PurchaseOrderListScreen: React.FC<Props> = ({ onBack }) => {
             >
               <Icon name="visibility" size={13} color="#EA580C" />
               <AppText style={[styles.cardActionText, { color: '#EA580C' }]}>View PO</AppText>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.cardActionBtn, { backgroundColor: '#F5F3FF', borderColor: '#DDD6FE', opacity: canOpenDetail ? 1 : 0.35 }]}
-              onPress={() => openDetail(item)}
-              activeOpacity={0.7}
-              disabled={!canOpenDetail}
-            >
-              <Icon name="open-in-new" size={13} color="#7C3AED" />
-              <AppText style={[styles.cardActionText, { color: '#7C3AED' }]}>Details</AppText>
             </TouchableOpacity>
           </View>
 
@@ -3369,6 +3379,12 @@ const styles = StyleSheet.create({
     paddingVertical: 8, borderRadius: 10, borderWidth: 1,
   },
   cardActionText: { fontSize: 12, fontWeight: '700' },
+  completedBadge: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: '#F0FDF4', borderRadius: 10, borderWidth: 1, borderColor: '#BBF7D0',
+    paddingVertical: 8, paddingHorizontal: 12,
+  },
+  completedText: { fontSize: 12, fontWeight: '700', color: '#16A34A' },
 
   // Inline note
   poNoteText: { fontSize: 12, color: Colors.textSecondary, lineHeight: 16 },

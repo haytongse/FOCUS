@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   FlatList,
@@ -10,7 +10,10 @@ import {
   TextInput,
   ScrollView,
   Platform,
+  Alert,
+  Modal,
 } from 'react-native';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { MaterialIcons as Icon } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
@@ -111,6 +114,25 @@ const ProductsListScreen: React.FC<Props> = ({ onBack, onCreate, onEdit }) => {
   // authoritative total working stock summed directly from the endpoint
   const [totalWorking, setTotalWorking] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showScanner, setShowScanner] = useState(false);
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const scanCooldown = useRef(false);
+
+  const openScanner = async () => {
+    if (!cameraPermission?.granted) {
+      const { granted } = await requestCameraPermission();
+      if (!granted) { Alert.alert('Permission required', 'Camera access is needed to scan barcodes.'); return; }
+    }
+    setShowScanner(true);
+  };
+
+  const handleBarcodeScan = ({ data }: { data: string }) => {
+    if (scanCooldown.current) return;
+    scanCooldown.current = true;
+    setShowScanner(false);
+    setSearchQuery(data.trim());
+    setTimeout(() => { scanCooldown.current = false; }, 1500);
+  };
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [displayPage, setDisplayPage] = useState(1);
@@ -646,7 +668,11 @@ const ProductsListScreen: React.FC<Props> = ({ onBack, onCreate, onEdit }) => {
           <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Icon name="close" size={18} color={Colors.textSecondary} />
           </TouchableOpacity>
-        ) : null}
+        ) : (
+          <TouchableOpacity onPress={openScanner} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Icon name="qr-code-scanner" size={20} color={Colors.primary} />
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Summary Bar */}
@@ -779,6 +805,25 @@ const ProductsListScreen: React.FC<Props> = ({ onBack, onCreate, onEdit }) => {
       <TouchableOpacity style={styles.fab} onPress={onCreate} activeOpacity={0.85}>
         <Icon name="add" size={28} color={Colors.white} />
       </TouchableOpacity>
+
+      {/* Barcode scanner modal */}
+      <Modal visible={showScanner} animationType="slide" onRequestClose={() => setShowScanner(false)}>
+        <View style={styles.scannerRoot}>
+          <CameraView
+            style={styles.scannerCamera}
+            facing="back"
+            barcodeScannerSettings={{ barcodeTypes: ['qr', 'ean13', 'ean8', 'code128', 'code39', 'upc_a', 'upc_e', 'aztec', 'pdf417', 'datamatrix'] }}
+            onBarcodeScanned={handleBarcodeScan}
+          />
+          <View style={styles.scannerOverlay}>
+            <View style={styles.scannerFrame} />
+            <AppText style={styles.scannerHint}>Point at a product barcode or QR code</AppText>
+          </View>
+          <TouchableOpacity style={styles.scannerClose} onPress={() => setShowScanner(false)}>
+            <Icon name="close" size={28} color="#fff" />
+          </TouchableOpacity>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -1224,6 +1269,27 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.textSecondary,
     fontWeight: '500',
+  },
+
+  scannerRoot:   { flex: 1, backgroundColor: '#000' },
+  scannerCamera: { flex: 1 },
+  scannerOverlay: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  scannerFrame: {
+    width: 260, height: 260, borderRadius: 16,
+    borderWidth: 3, borderColor: '#fff',
+  },
+  scannerHint: {
+    marginTop: 24, color: '#fff', fontSize: 14, fontWeight: '600',
+    textAlign: 'center', textShadowColor: 'rgba(0,0,0,0.8)', textShadowRadius: 4,
+  },
+  scannerClose: {
+    position: 'absolute', top: 52, right: 20,
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center', justifyContent: 'center',
   },
 });
 

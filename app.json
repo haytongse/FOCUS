@@ -43,7 +43,13 @@
           "iCloudContainerEnvironment": "Production"
         }
       ],
-      "expo-font"
+      "expo-font",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Focus ERP to use the camera to scan barcodes."
+        }
+      ]
     ],
     "extra": {
       "eas": {

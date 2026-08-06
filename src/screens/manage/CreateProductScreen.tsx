@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   ScrollView,
@@ -8,7 +8,9 @@ import {
   ActivityIndicator,
   Image,
   Modal,
+  Alert,
 } from 'react-native';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { MaterialIcons as Icon } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 type Asset = ImagePicker.ImagePickerAsset;
@@ -61,6 +63,26 @@ const CreateProductScreen: React.FC<Props> = ({ onBack }) => {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+
+  const [showScanner, setShowScanner] = useState(false);
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const scanCooldown = useRef(false);
+
+  const openScanner = async () => {
+    if (!cameraPermission?.granted) {
+      const { granted } = await requestCameraPermission();
+      if (!granted) { Alert.alert('Permission required', 'Camera access is needed to scan barcodes.'); return; }
+    }
+    setShowScanner(true);
+  };
+
+  const handleBarcodeScan = ({ data }: { data: string }) => {
+    if (scanCooldown.current) return;
+    scanCooldown.current = true;
+    setShowScanner(false);
+    setSku(data.trim().toUpperCase());
+    setTimeout(() => { scanCooldown.current = false; }, 1500);
+  };
 
   useEffect(() => {
     getCategoriesApi()
@@ -236,6 +258,11 @@ const CreateProductScreen: React.FC<Props> = ({ onBack }) => {
             autoCapitalize="characters"
             error={errors.sku}
             hint="Uppercase letters and numbers only, 2–32 chars"
+            rightIcon={
+              <TouchableOpacity onPress={openScanner} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Icon name="qr-code-scanner" size={22} color={Colors.primary} />
+              </TouchableOpacity>
+            }
           />
 
           <AppInput
@@ -487,6 +514,25 @@ const CreateProductScreen: React.FC<Props> = ({ onBack }) => {
             </TouchableOpacity>
           </TouchableOpacity>
         </TouchableOpacity>
+      </Modal>
+
+      {/* Barcode scanner modal */}
+      <Modal visible={showScanner} animationType="slide" onRequestClose={() => setShowScanner(false)}>
+        <View style={styles.scannerRoot}>
+          <CameraView
+            style={styles.scannerCamera}
+            facing="back"
+            barcodeScannerSettings={{ barcodeTypes: ['qr', 'ean13', 'ean8', 'code128', 'code39', 'upc_a', 'upc_e', 'aztec', 'pdf417', 'datamatrix'] }}
+            onBarcodeScanned={handleBarcodeScan}
+          />
+          <View style={styles.scannerOverlay}>
+            <View style={styles.scannerFrame} />
+            <AppText style={styles.scannerHint}>Point at a product barcode or QR code</AppText>
+          </View>
+          <TouchableOpacity style={styles.scannerClose} onPress={() => setShowScanner(false)}>
+            <Icon name="close" size={28} color="#fff" />
+          </TouchableOpacity>
+        </View>
       </Modal>
     </View>
   );
@@ -751,6 +797,27 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: '#F1F5F9',
     marginVertical: 4,
+  },
+
+  scannerRoot:   { flex: 1, backgroundColor: '#000' },
+  scannerCamera: { flex: 1 },
+  scannerOverlay: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  scannerFrame: {
+    width: 260, height: 260, borderRadius: 16,
+    borderWidth: 3, borderColor: '#fff',
+  },
+  scannerHint: {
+    marginTop: 24, color: '#fff', fontSize: 14, fontWeight: '600',
+    textAlign: 'center', textShadowColor: 'rgba(0,0,0,0.8)', textShadowRadius: 4,
+  },
+  scannerClose: {
+    position: 'absolute', top: 52, right: 20,
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center', justifyContent: 'center',
   },
 });
 

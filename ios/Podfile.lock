@@ -51,6 +51,12 @@ PODS:
     - Yoga
   - ExpoAsset (56.0.21):
     - ExpoModulesCore
+  - ExpoCamera (56.0.8):
+    - ExpoModulesCore
+  - ExpoCameraBarcodeScanning (56.0.8):
+    - ExpoCamera
+    - ZXingObjC/OneD
+    - ZXingObjC/PDF417
   - ExpoDocumentPicker (56.0.4):
     - ExpoModulesCore
   - ExpoDomWebView (56.0.6):
@@ -2219,12 +2225,19 @@ PODS:
     - ReactNativeDependencies
     - Yoga
   - Yoga (0.0.0)
+  - ZXingObjC/Core (3.6.9)
+  - ZXingObjC/OneD (3.6.9):
+    - ZXingObjC/Core
+  - ZXingObjC/PDF417 (3.6.9):
+    - ZXingObjC/Core
 
 DEPENDENCIES:
   - "AsyncStorage (from `../node_modules/@react-native-async-storage/async-storage`)"
   - EXConstants (from `../node_modules/expo-constants/ios`)
   - Expo (from `../node_modules/expo`)
   - ExpoAsset (from `../node_modules/expo-asset/ios`)
+  - ExpoCamera (from `../node_modules/expo-camera/ios`)
+  - ExpoCameraBarcodeScanning (from `../node_modules/expo-camera/ios`)
   - ExpoDocumentPicker (from `../node_modules/expo-document-picker/ios`)
   - "ExpoDomWebView (from `../node_modules/@expo/dom-webview/ios`)"
   - ExpoFileSystem (from `../node_modules/expo-file-system/ios`)
@@ -2335,6 +2348,7 @@ SPEC REPOS:
     - lottie-ios
     - nanopb
     - PromisesObjC
+    - ZXingObjC
 
 EXTERNAL SOURCES:
   AsyncStorage:
@@ -2345,6 +2359,10 @@ EXTERNAL SOURCES:
     :path: "../node_modules/expo"
   ExpoAsset:
     :path: "../node_modules/expo-asset/ios"
+  ExpoCamera:
+    :path: "../node_modules/expo-camera/ios"
+  ExpoCameraBarcodeScanning:
+    :path: "../node_modules/expo-camera/ios"
   ExpoDocumentPicker:
     :path: "../node_modules/expo-document-picker/ios"
   ExpoDomWebView:
@@ -2538,6 +2556,8 @@ SPEC CHECKSUMS:
   EXConstants: 9fff81852f1d2e72502786a66f5ddb6d0eb76436
   Expo: c9a574554757067cac2ebe8de1f0426728c13fb8
   ExpoAsset: 26f77f0cdaffe419b80e86f02cc5365722bc135e
+  ExpoCamera: 68008452cc12ad5ad5d46cc7c835073228c008da
+  ExpoCameraBarcodeScanning: 2acb6385fe6aa7563da5241c775092aac40195ce
   ExpoDocumentPicker: caa9c7c1071dc31262d86a8fe48f51929d291a43
   ExpoDomWebView: 4e53b05879dc73ba374f76bff93dd64c8a0d91b3
   ExpoFileSystem: 9dc04ec1e11bc3c7b965d7feb2de12c789755c7b
@@ -2642,6 +2662,7 @@ SPEC CHECKSUMS:
   RNScreens: 7118cd7715c226856125b5bece3c4d9abec90356
   RNSVG: 0e52210d4d43165e7e2cf9c890a9848b27e513ac
   Yoga: 77dfa8673de2874e1855002ae59c68b8be9b007b
+  ZXingObjC: 8898711ab495761b2dbbdec76d90164a6d7e14c5
 
 PODFILE CHECKSUM: 5a2daec7abc1ee485aee8485b6bf45b29206d509
 
