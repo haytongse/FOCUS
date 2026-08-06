@@ -6,7 +6,9 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "test": "jest"
+    "test": "jest",
+    "build:preview": "node scripts/bump-version.js && eas build --platform ios --profile preview",
+    "build:production": "node scripts/bump-version.js && eas build --platform ios --profile production"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
@@ -27,6 +29,7 @@
     "expo-image-picker": "~56.0.22",
     "expo-print": "~56.0.4",
     "expo-sharing": "~56.0.23",
+    "expo-updates": "~56.0.23",
     "jszip": "^3.10.1",
     "lottie-react-native": "^7.3.8",
     "nativewind": "^4.2.4",
