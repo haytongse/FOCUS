@@ -20,6 +20,7 @@ const AppNavigator: React.FC = () => {
   const [screen, setScreen] = useState<AppScreen>('splash');
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const [fcmToken, setFcmToken] = useState<string | null>(null);
 
   // Restore token AND user from AsyncStorage after splash
   const handleSplashFinish = useCallback(async () => {
@@ -36,17 +37,19 @@ const AppNavigator: React.FC = () => {
     }
   }, []);
 
-  const handleLoginSuccess = useCallback((loggedInUser: User, loggedInToken: string) => {
+  const handleLoginSuccess = useCallback((loggedInUser: User, loggedInToken: string, serverFcmToken?: string | null) => {
     setUser(loggedInUser);
     setToken(loggedInToken);
-    setAuthUser(loggedInUser); // persist so it survives app restart
+    if (serverFcmToken) setFcmToken(serverFcmToken);
+    setAuthUser(loggedInUser);
     setScreen('main');
   }, []);
 
   const handleLogout = useCallback(() => {
-    setAuthToken(null); // clears token + user from AsyncStorage
+    setAuthToken(null);
     setUser(null);
     setToken(null);
+    setFcmToken(null);
     setScreen('login');
   }, []);
 
@@ -74,7 +77,7 @@ const AppNavigator: React.FC = () => {
     return (
       <POSProvider>
         <NavigationContainer>
-          <DrawerNavigator user={user} token={token} onLogout={handleLogout} />
+          <DrawerNavigator user={user} token={token} onLogout={handleLogout} fcmToken={fcmToken} />
         </NavigationContainer>
       </POSProvider>
     );
@@ -83,7 +86,7 @@ const AppNavigator: React.FC = () => {
   // Admin / manager / unknown roles: standard drawer + tabs
   return (
     <NavigationContainer>
-      <DrawerNavigator user={user} token={token} onLogout={handleLogout} />
+      <DrawerNavigator user={user} token={token} onLogout={handleLogout} fcmToken={fcmToken} />
     </NavigationContainer>
   );
 };

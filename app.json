@@ -4,19 +4,14 @@
   "expo": {
     "name": "Focus ERP",
     "slug": "focus-erp",
-    "version": "1.0.1",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "in.focuslab.stafferp",
-      "googleServicesFile": "./ios/GoogleService-Info.plist"
+      "googleServicesFile": "./GoogleService-Info.plist"
     },
     "android": {
       "adaptiveIcon": {
@@ -38,6 +33,8 @@
     "plugins": [
       "expo-updates",
       "@react-native-firebase/app",
+      "@react-native-firebase/messaging",
+      "./plugins/withFirebaseModularHeaders",
       [
         "expo-image-picker",
         {
@@ -57,7 +54,8 @@
         {
           "cameraPermission": "Allow Focus ERP to use the camera to scan barcodes."
         }
-      ]
+      ],
+      "expo-sharing"
     ],
     "extra": {
       "eas": {

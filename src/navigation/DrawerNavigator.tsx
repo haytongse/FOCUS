@@ -28,6 +28,7 @@ interface DrawerNavigatorProps {
   user: User | null;
   token: string | null;
   onLogout: () => void;
+  fcmToken?: string | null;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -36,6 +37,7 @@ const DrawerNavigator: React.FC<DrawerNavigatorProps> = ({
   user,
   token,
   onLogout,
+  fcmToken,
 }) => {
   const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
@@ -157,7 +159,7 @@ const DrawerNavigator: React.FC<DrawerNavigatorProps> = ({
     <DrawerContext.Provider value={{ openDrawer }}>
       <View style={styles.root}>
         {/* ── Main app content ── */}
-        <BottomTabNavigator user={user} onLogout={onLogout} />
+        <BottomTabNavigator user={user} onLogout={onLogout} fcmToken={fcmToken} />
 
         {/* ── Overlay + drawer (rendered on top, pointer-events controlled) ── */}
         <View

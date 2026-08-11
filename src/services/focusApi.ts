@@ -181,7 +181,7 @@ export const loginApi = async (
   email: string,
   password: string,
   fcmToken?: string | null,
-): Promise<{ user: FocusUser; token: string; refreshToken?: string; expiresIn?: number }> => {
+): Promise<{ user: FocusUser; token: string; refreshToken?: string; expiresIn?: number; fcmToken?: string }> => {
   const body: Record<string, any> = { email, password };
   if (fcmToken) body.fcm_token = fcmToken;
 
@@ -219,11 +219,14 @@ export const loginApi = async (
     payload?.refresh_token ?? payload?.refreshToken;
   const expiresIn: number | undefined =
     payload?.expire_in ?? payload?.expires_in ?? payload?.expiresIn;
+  const serverFcmToken: string | undefined =
+    payload?.fcmToken ?? payload?.fcm_token;
 
   return {
     token,
     refreshToken,
     expiresIn,
+    fcmToken: serverFcmToken,
     user: {
       id: String(rawUser.id ?? ''),
       name: rawUser.name ?? rawUser.username ?? 'User',
@@ -232,6 +235,12 @@ export const loginApi = async (
       role: rawUser.role,
     },
   };
+};
+
+// ─── Push Notification ────────────────────────────────────────────────────────
+
+export const sendTestPushApi = async (fcmToken: string): Promise<void> => {
+  await api.post('/api/v1/notifications/test-push', { fcm_token: fcmToken });
 };
 
 // ─── ERP Left-Menu ────────────────────────────────────────────────────────────

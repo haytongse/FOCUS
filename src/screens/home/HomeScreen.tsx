@@ -15,6 +15,7 @@ import {
   Dimensions,
   Animated,
   Easing,
+  Alert,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons as Icon } from '@expo/vector-icons';
@@ -26,7 +27,6 @@ import SaleOrderDetailScreen from './SaleOrderDetailScreen';
 import SignaturePad, { SignaturePadRef } from '../../components/SignaturePad';
 import { User } from '../../models/User';
 import { tabEvents } from '../../navigation/tabEvents';
-import { useDrawer } from '../../navigation/DrawerContext';
 import { useAlert } from '../../components/AppAlert';
 import Colors from '../../theme/colors';
 import {
@@ -49,6 +49,7 @@ import {
 
 interface HomeScreenProps {
   user: User | null;
+  fcmToken?: string | null;
 }
 
 const PRIMARY       = '#2563EB';
@@ -382,10 +383,10 @@ const SORow: React.FC<{
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
-const HomeScreen: React.FC<HomeScreenProps> = ({ user }) => {
+const HomeScreen: React.FC<HomeScreenProps> = ({ user, fcmToken }) => {
   const insets = useSafeAreaInsets();
-  const { openDrawer } = useDrawer();
   const { showAlert, hideAlert } = useAlert();
+
 
   // List state
   const [docType, setDocType]   = useState<'SO' | 'DO' | 'RV'>('SO');
@@ -502,6 +503,12 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ user }) => {
   const grandTotal     = useMemo(() => filteredSO.reduce((s, o) => s + calcTotal(o), 0), [filteredSO]);
   const confirmedTotal = useMemo(() => filteredConfirmed.reduce((s, o) => s + calcTotal(o), 0), [filteredConfirmed]);
   const receivedTotal  = useMemo(() => filteredReceived.reduce((s, o) => s + calcTotal(o), 0), [filteredReceived]);
+
+  const isOwner = user?.role === 'owner';
+  const unpaidTotal = useMemo(
+    () => unpaidInvoices.reduce((s, h) => s + (Number(h.totalCents) || 0), 0) / 100,
+    [unpaidInvoices],
+  );
 
   // Live total in the modal, recalculated as user edits qty/discount
   const modalTotal = useMemo(() => {
@@ -654,88 +661,98 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ user }) => {
       <StatusBar barStyle="light-content" backgroundColor={PRIMARY} />
 
       {/* Top Bar */}
-      <View style={[styles.topBar, { paddingTop: insets.top + 12 }]}>
-        <TouchableOpacity style={styles.hamburger} activeOpacity={0.7} onPress={openDrawer}>
-          <View style={styles.hamLine} />
-          <View style={[styles.hamLine, { width: 16 }]} />
-          <View style={styles.hamLine} />
-        </TouchableOpacity>
-        <AppText variant="h4" style={styles.topTitle}>Dashboard</AppText>
-        <TouchableOpacity style={styles.avatar} activeOpacity={0.8}>
-          <AppText style={styles.avatarText}>{user?.name?.charAt(0)?.toUpperCase() ?? 'U'}</AppText>
-        </TouchableOpacity>
-      </View>
-
-      {/* Invoiced Unpaid card */}
-      <View style={styles.kpiCard}>
-        {/* Card header */}
-        <View style={styles.kpiHeader}>
-          <View style={styles.kpiIconBox}>
-            <Icon name="request-quote" size={18} color="#FFFFFF" />
-          </View>
-          <View style={styles.kpiTexts}>
-            <AppText style={styles.kpiLabel}>Invoiced Unpaid</AppText>
-            <AppText style={styles.kpiValue}>
-              {loading ? '—' : `$${(unpaidInvoices.reduce((s, h) => s + Number(h.totalCents ?? 0), 0) / 100).toFixed(2)}`}
-            </AppText>
-          </View>
-          <View style={styles.kpiBadge}>
-            <AppText style={styles.kpiBadgeText}>
-              {loading ? '…' : unpaidInvoices.length}
-            </AppText>
-          </View>
+      <View style={[styles.topBar, { paddingTop: insets.top, justifyContent: 'space-between' }]}>
+        <View>
+          <AppText style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', fontWeight: '500' }}>
+            {(() => {
+              const h = new Date().getHours();
+              return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+            })()}
+          </AppText>
+          <AppText style={{ fontSize: 16, color: '#FFFFFF', fontWeight: '800' }}>
+            {user?.name ?? ''}
+          </AppText>
+          {fcmToken ? (
+            <TouchableOpacity
+              onPress={() => Alert.alert('FCM Token', fcmToken)}
+              activeOpacity={0.7}
+              style={{ marginTop: 4 }}
+            >
+              <AppText style={{ fontSize: 10, color: 'rgba(255,255,255,0.55)', fontFamily: 'monospace' }}>
+                FCM: {fcmToken.slice(0, 14)}…{fcmToken.slice(-6)}
+              </AppText>
+            </TouchableOpacity>
+          ) : null}
         </View>
-
-        {/* Invoice rows */}
-        {!loading && unpaidInvoices.length > 0 && (
-          <ScrollView style={styles.kpiList} contentContainerStyle={{ paddingBottom: 24 }} showsVerticalScrollIndicator={false}>
-            {unpaidInvoices.map(inv => {
-              const campus =
-                inv.campusCode ??
-                inv.campus?.campusCode ??
-                campusMap[String(inv.campusId)]?.campusCode ??
-                String(inv.campusId);
-              return (
-                <View key={inv.id} style={styles.kpiRow}>
-                  <View style={styles.kpiRowLeft}>
-                    <AppText style={styles.kpiInvNum}>{inv.invoiceNumber}</AppText>
-                    <View style={styles.kpiMeta}>
-                      {campus ? (
-                        <View style={styles.kpiChip}>
-                          <AppText style={styles.kpiChipText}>{campus}</AppText>
-                        </View>
-                      ) : null}
-                      <AppText style={styles.kpiMetaText}>
-                        {inv.issuedAt ? new Date(inv.issuedAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short' }) : '—'}
-                      </AppText>
-                    </View>
-                    {inv.note ? (
-                      <AppText style={styles.kpiNote} numberOfLines={2}>{inv.note}</AppText>
-                    ) : null}
-                  </View>
-                  <View style={styles.kpiRowRight}>
-                    <AppText style={styles.kpiRowAmt}>
-                      ${(Number(inv.totalCents ?? 0) / 100).toFixed(2)}
-                    </AppText>
-                    {inv.dueAt ? (
-                      <AppText style={styles.kpiDue}>
-                        Due {new Date(inv.dueAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}
-                      </AppText>
-                    ) : null}
-                  </View>
-                </View>
-              );
-            })}
-          </ScrollView>
-        )}
-
-        {!loading && unpaidInvoices.length === 0 && (
-          <AppText style={styles.kpiEmpty}>No unpaid invoices</AppText>
-        )}
+        <TouchableOpacity style={styles.avatar} activeOpacity={0.8}>
+          <Icon name="notifications-none" size={20} color="#FFFFFF" />
+        </TouchableOpacity>
       </View>
+
+      <View style={{ flex: 1 }}>
+      {/* Unpaid Invoices — owner only */}
+      {isOwner && (
+        <View style={styles.kpiCard}>
+          <View style={styles.kpiHeader}>
+            <View style={styles.kpiIconBox}>
+              <Icon name="receipt-long" size={22} color="#FFFFFF" />
+            </View>
+            <View style={styles.kpiTexts}>
+              <AppText style={styles.kpiLabel}>Unpaid Invoices</AppText>
+              <AppText style={styles.kpiValue}>${unpaidTotal.toFixed(2)}</AppText>
+            </View>
+            <View style={styles.kpiBadge}>
+              <AppText style={styles.kpiBadgeText}>{unpaidInvoices.length}</AppText>
+            </View>
+          </View>
+          {loading ? (
+            <ActivityIndicator color={PURPLE} style={{ marginTop: 20 }} />
+          ) : unpaidInvoices.length === 0 ? (
+            <AppText style={styles.kpiEmpty}>No unpaid invoices</AppText>
+          ) : (
+            <FlatList
+              data={unpaidInvoices}
+              keyExtractor={item => item.id}
+              contentContainerStyle={styles.kpiList}
+              showsVerticalScrollIndicator={false}
+              renderItem={({ item }) => {
+                const amt = (Number(item.totalCents) || 0) / 100;
+                const campus = item.campusCode ?? item.campus?.campusCode ?? null;
+                const customer = item.customerOrg?.nameEn ?? item.customerOrg?.name ?? null;
+                return (
+                  <View style={styles.kpiRow}>
+                    <View style={styles.kpiRowLeft}>
+                      <AppText style={styles.kpiInvNum}>{item.invoiceNumber}</AppText>
+                      <View style={styles.kpiMeta}>
+                        {campus ? (
+                          <View style={styles.kpiChip}>
+                            <AppText style={styles.kpiChipText}>{campus}</AppText>
+                          </View>
+                        ) : null}
+                        {customer ? (
+                          <AppText style={styles.kpiMetaText} numberOfLines={1}>{customer}</AppText>
+                        ) : null}
+                      </View>
+                      {item.dueAt ? (
+                        <AppText style={styles.kpiNote}>Due {formatDate(item.dueAt)}</AppText>
+                      ) : null}
+                    </View>
+                    <View style={styles.kpiRowRight}>
+                      <AppText style={styles.kpiRowAmt}>${amt.toFixed(2)}</AppText>
+                      {item.issuedAt ? (
+                        <AppText style={styles.kpiDue}>{formatDate(item.issuedAt)}</AppText>
+                      ) : null}
+                    </View>
+                  </View>
+                );
+              }}
+            />
+          )}
+        </View>
+      )}
 
       {/* Orders Card */}
-      <View style={[styles.card, styles.ordersCard]}>
+      <View style={[styles.card, styles.ordersCard, isOwner ? { flex: 1, height: undefined } : null]}>
 
         {/* Header */}
         <View style={styles.cardHeader}>
@@ -888,6 +905,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ user }) => {
             }
           />
         ) : null}
+      </View>
       </View>
 
       {/* ── Convert SO → DO Modal ─────────────────────────────────────────────── */}
@@ -1403,7 +1421,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1, shadowRadius: 12, elevation: 5,
   },
   ordersCard: {
-    height: SCREEN_H * 0.6,
+    height: SCREEN_H * 0.88,
     borderRadius: 24,
     marginHorizontal: 16, marginTop: 16, marginBottom: 16,
     overflow: 'hidden', paddingTop: 18,

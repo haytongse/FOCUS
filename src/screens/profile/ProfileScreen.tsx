@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StatusBar,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons as Icon } from '@expo/vector-icons';
@@ -17,12 +18,15 @@ import { useAlert } from '../../components/AppAlert';
 import { useProfileViewModel } from '../../viewmodels/useProfileViewModel';
 import { User } from '../../models/User';
 import { getUsersApi, ApiUser } from '../../services/focusApi';
+import { getFcmToken } from '../../services/fcmService';
+import { sendTestPushApi } from '../../services/focusApi';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface ProfileScreenProps {
   user: User | null;
   onLogout: () => void;
+  fcmToken?: string | null;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -116,12 +120,13 @@ const InfoRow: React.FC<{ icon: string; label: string; value: string; last?: boo
   </View>
 );
 
-const SettingRow: React.FC<{ icon: string; label: string; subtitle: string; last?: boolean }> = ({
-  icon, label, subtitle, last,
+const SettingRow: React.FC<{ icon: string; label: string; subtitle: string; last?: boolean; onPress?: () => void }> = ({
+  icon, label, subtitle, last, onPress,
 }) => (
   <TouchableOpacity
     style={[styles.settingRow, !last && styles.infoRowBorder]}
     activeOpacity={0.6}
+    onPress={onPress}
   >
     <View style={styles.settingIconBox}>
       <Icon name={icon} size={18} color={Colors.primary} />
@@ -136,7 +141,7 @@ const SettingRow: React.FC<{ icon: string; label: string; subtitle: string; last
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
-const ProfileScreen: React.FC<ProfileScreenProps> = ({ user, onLogout }) => {
+const ProfileScreen: React.FC<ProfileScreenProps> = ({ user, onLogout, fcmToken: propFcmToken }) => {
   const insets = useSafeAreaInsets();
   const vm = useProfileViewModel(user);
   const { showAlert } = useAlert();
@@ -144,14 +149,42 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ user, onLogout }) => {
   const [teamUsers, setTeamUsers] = useState<ApiUser[]>([]);
   const [teamLoading, setTeamLoading] = useState(true);
   const [teamError, setTeamError] = useState<string | null>(null);
+  const [fcmToken, setFcmToken] = useState<string | null>(propFcmToken ?? null);
+  const [fcmLoading, setFcmLoading] = useState(false);
+  const [fcmChecked, setFcmChecked] = useState(!!propFcmToken);
+
+  const isOwner = user?.role === 'owner';
 
   useEffect(() => {
+    if (propFcmToken) {
+      setFcmToken(propFcmToken);
+      setFcmChecked(true);
+    }
+  }, [propFcmToken]);
+
+  const handleNotificationsPress = async () => {
+    setFcmLoading(true);
+    try {
+      const token = fcmToken ?? (await getFcmToken());
+      if (token) {
+        await sendTestPushApi(token);
+      } else {
+        Alert.alert('No Token', 'Push notifications are not available on this device.');
+      }
+    } catch {
+      Alert.alert('Error', 'Failed to send push notification.');
+    } finally {
+      setFcmLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isOwner) { setTeamLoading(false); return; }
     getUsersApi()
       .then(setTeamUsers)
       .catch(err => setTeamError(err?.message ?? 'Failed to load team'))
       .finally(() => setTeamLoading(false));
-  }, []);
-
+  }, [isOwner]);
   const color = roleColor[user?.role ?? 'cashier'] ?? Colors.primary;
   const initial = user?.name?.charAt(0)?.toUpperCase() ?? 'U';
 
@@ -265,32 +298,78 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ user, onLogout }) => {
           ))}
         </View>
 
-        {/* Team */}
-        <AppText style={styles.sectionLabel}>TEAM</AppText>
+        {/* Push Notifications — all users */}
+        <AppText style={styles.sectionLabel}>PUSH NOTIFICATIONS</AppText>
         <View style={styles.card}>
-          {teamLoading ? (
-            <View style={styles.teamCenter}>
-              <ActivityIndicator size="small" color={Colors.primary} />
-              <AppText style={styles.teamMeta}>Loading team…</AppText>
-            </View>
-          ) : teamError ? (
-            <View style={styles.teamCenter}>
-              <AppText style={styles.teamErrorText}>{teamError}</AppText>
-            </View>
-          ) : teamUsers.length === 0 ? (
-            <View style={styles.teamCenter}>
-              <AppText style={styles.teamMeta}>No team members found</AppText>
-            </View>
-          ) : (
-            teamUsers.map((member, i) => (
-              <TeamRow
-                key={member.id}
-                member={member}
-                last={i === teamUsers.length - 1}
+          <View style={styles.pushRow}>
+            <View style={[styles.pushIconBox, { backgroundColor: fcmToken ? '#ECFDF5' : '#FEF3C7' }]}>
+              <Icon
+                name={fcmToken ? 'notifications-active' : 'notifications-off'}
+                size={20}
+                color={fcmToken ? Colors.success : Colors.warning}
               />
-            ))
-          )}
+            </View>
+            <View style={{ flex: 1 }}>
+              <AppText style={styles.pushLabel}>Push Notifications</AppText>
+              {fcmToken ? (
+                <AppText style={styles.fcmTokenText} selectable numberOfLines={2}>
+                  {fcmToken}
+                </AppText>
+              ) : (
+                <AppText variant="caption" color="textSecondary" style={{ marginTop: 2 }}>
+                  Not available on this device
+                </AppText>
+              )}
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={[styles.pushActionBtn, styles.pushActionBtnRefresh]}
+            onPress={handleNotificationsPress}
+            activeOpacity={0.7}
+          >
+            {fcmLoading
+              ? <ActivityIndicator size="small" color={Colors.primary} />
+              : <>
+                  <Icon name="notifications-active" size={16} color={Colors.primary} />
+                  <AppText style={[styles.pushActionBtnText, { color: Colors.primary }]}>
+                    Push Notification
+                  </AppText>
+                </>
+            }
+          </TouchableOpacity>
         </View>
+
+        {/* Team — owner only */}
+        {isOwner && (
+          <>
+            <AppText style={styles.sectionLabel}>TEAM</AppText>
+            <View style={styles.card}>
+              {teamLoading ? (
+                <View style={styles.teamCenter}>
+                  <ActivityIndicator size="small" color={Colors.primary} />
+                  <AppText style={styles.teamMeta}>Loading team…</AppText>
+                </View>
+              ) : teamError ? (
+                <View style={styles.teamCenter}>
+                  <AppText style={styles.teamErrorText}>{teamError}</AppText>
+                </View>
+              ) : teamUsers.length === 0 ? (
+                <View style={styles.teamCenter}>
+                  <AppText style={styles.teamMeta}>No team members found</AppText>
+                </View>
+              ) : (
+                teamUsers.map((member, i) => (
+                  <TeamRow
+                    key={member.id}
+                    member={member}
+                    last={i === teamUsers.length - 1}
+                  />
+                ))
+              )}
+            </View>
+          </>
+        )}
 
         {/* Sign Out */}
         <AppButton
@@ -476,6 +555,70 @@ const styles = StyleSheet.create({
   settingLabel: {
     fontWeight: '600',
     marginBottom: 1,
+  },
+
+  // Push notifications
+  pushRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 12,
+  },
+  pushIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pushLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  pushStatusBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  pushStatusText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  pushActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: Colors.primary,
+    marginHorizontal: 16,
+    marginBottom: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  pushActionBtnRefresh: {
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: Colors.primary,
+  },
+  pushActionBtnText: {
+    color: Colors.white,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  fcmTokenBox: {
+    paddingHorizontal: 16,
+    paddingBottom: 14,
+    borderTopWidth: 1,
+    borderTopColor: Colors.divider,
+    paddingTop: 10,
+  },
+  fcmTokenText: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+    marginTop: 4,
+    lineHeight: 16,
   },
 
   // Sign out

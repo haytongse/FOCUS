@@ -40,6 +40,11 @@ import { ApiProduct, ApiCampus, ApiVendor, ApiUom, ApiLocation, ApiCategory, Api
 
 type ManageView =
   | 'hub'
+  | 'masterData'
+  | 'accountReceived'
+  | 'inventoryControl'
+  | 'accountPay'
+  | 'purchaseOrder'
   | 'categoryList' | 'categoryCreate' | 'categoryEdit'
   | 'productList'  | 'productCreate' | 'productEdit'
   | 'userList'     | 'userCreate'    | 'userEdit'
@@ -68,118 +73,78 @@ interface ManageCard {
   bg: string;
 }
 
+const MASTER_DATA_CARDS: ManageCard[] = [
+  { id: 'campusList',  title: 'Campus',   subtitle: 'Configure campus locations',          icon: 'location-city', color: '#F59E0B', bg: '#FEF3C7' },
+  { id: 'locationList',title: 'Location', subtitle: 'Manage branch & warehouse locations', icon: 'place',         color: '#06B6D4', bg: '#CFFAFE' },
+  { id: 'userList',    title: 'User',     subtitle: 'Manage team members & roles',         icon: 'people',        color: '#10B981', bg: '#D1FAE5' },
+  { id: 'uomList',     title: 'UOM',      subtitle: 'Units of measure for products',       icon: 'straighten',    color: '#10B981', bg: '#D1FAE5' },
+  { id: 'vendorList',  title: 'Vendor',   subtitle: 'Manage suppliers & vendor contacts',  icon: 'store',         color: '#06B6D4', bg: '#CFFAFE' },
+];
+
+const ACCOUNT_PAY_CARDS: ManageCard[] = [
+  { id: 'vendorPayables',  title: 'Vendor Payables',   subtitle: 'Track & pay outstanding vendor bills',          icon: 'account-balance-wallet', color: '#EF4444', bg: '#FEE2E2' },
+  { id: 'expenses',        title: 'Expenses',           subtitle: 'Record & track operating expenses by category', icon: 'receipt-long',           color: '#F59E0B', bg: '#FEF3C7' },
+  { id: 'incomeStatement', title: 'Income Statement',   subtitle: 'Revenue, expenses & net profit by date range',  icon: 'bar-chart',              color: '#16A34A', bg: '#DCFCE7' },
+];
+
+const INVENTORY_CONTROL_CARDS: ManageCard[] = [
+  { id: 'productList',   title: 'Products',        subtitle: 'View & add products to the catalog',              icon: 'inventory-2', color: '#2563EB', bg: '#DBEAFE' },
+  { id: 'movementItems', title: 'Movement Items',  subtitle: 'Stock movements: adjustments, receipts & on-hand', icon: 'swap-vert',   color: '#0891B2', bg: '#CFFAFE' },
+];
+
+const ACCOUNT_RECEIVED_CARDS: ManageCard[] = [
+  { id: 'quotationList',       title: 'Quotation',       subtitle: 'View, confirm & convert quotations to SO',      icon: 'description',   color: '#10B981', bg: '#D1FAE5' },
+  { id: 'saleOrderList',       title: 'Sale Orders',     subtitle: 'View & track all sale orders',                  icon: 'receipt-long',  color: '#EF4444', bg: '#FEE2E2' },
+  { id: 'saleInvoiceList',     title: 'Sale Invoices',   subtitle: 'Manage invoiced & paid orders',                 icon: 'request-quote', color: '#7C3AED', bg: '#EDE9FE' },
+  { id: 'rentalInvoiceList',   title: 'Rental Invoice',  subtitle: 'Convert rental contracts to invoice',           icon: 'print',         color: '#06B6D4', bg: '#CFFAFE' },
+  { id: 'invoiceDetailExport', title: 'Invoice Details', subtitle: 'Export invoice details to Excel by date & campus', icon: 'table-view', color: '#0369A1', bg: '#E0F2FE' },
+];
+
+const PURCHASE_ORDER_CARDS: ManageCard[] = [
+  { id: 'purchaseOrderList', title: 'Purchase Orders', subtitle: 'Create & track supplier purchase orders',            icon: 'shopping-bag', color: '#F59E0B', bg: '#FEF3C7' },
+  { id: 'poExport',          title: 'PO Details',      subtitle: 'Export purchase order details to Excel by date & location', icon: 'table-view', color: '#7C3AED', bg: '#EDE9FE' },
+];
+
 const CARDS: ManageCard[] = [
   {
-    id: 'campusList',
-    title: 'Campus',
-    subtitle: 'Configure campus locations',
-    icon: 'location-city',
-    color: '#F59E0B',
-    bg: '#FEF3C7',
-  },
-  {
-    id: 'locationList',
-    title: 'Location',
-    subtitle: 'Manage branch & warehouse locations',
-    icon: 'place',
-    color: '#06B6D4',
-    bg: '#CFFAFE',
-  },
-  {
-    id: 'userList',
-    title: 'Users',
-    subtitle: 'Manage team members & roles',
-    icon: 'people',
-    color: '#10B981',
-    bg: '#D1FAE5',
-  },
-  {
-    id: 'uomList',
-    title: 'UOM',
-    subtitle: 'Units of measure for products',
-    icon: 'straighten',
-    color: '#10B981',
-    bg: '#D1FAE5',
-  },
-  {
-    id: 'vendorList',
-    title: 'Vendor',
-    subtitle: 'Manage suppliers & vendor contacts',
-    icon: 'store',
-    color: '#06B6D4',
-    bg: '#CFFAFE',
-  },
-  {
-    id: 'categoryList',
-    title: 'Category',
-    subtitle: 'Create & manage product categories',
-    icon: 'category',
+    id: 'masterData',
+    title: 'Maintenance',
+    subtitle: 'Campus, Location, User, UOM, Vendor',
+    icon: 'folder-special',
     color: '#7C3AED',
     bg: '#EDE9FE',
   },
   {
-    id: 'productList',
-    title: 'Products',
-    subtitle: 'View & add products to the catalog',
-    icon: 'inventory-2',
+    id: 'inventoryControl',
+    title: 'Inventory Controls',
+    subtitle: 'Products, Movement Items',
+    icon: 'inventory',
     color: '#2563EB',
     bg: '#DBEAFE',
   },
   {
-    id: 'movementItems',
-    title: 'Movement Items',
-    subtitle: 'Stock movements: adjustments, receipts & on-hand',
-    icon: 'swap-vert',
-    color: '#0891B2',
-    bg: '#CFFAFE',
-  },
-  {
-    id: 'saleOrderList',
-    title: 'Sale Orders',
-    subtitle: 'View & track all sale orders',
-    icon: 'receipt-long',
-    color: '#EF4444',
-    bg: '#FEE2E2',
-  },
-  {
-    id: 'quotationList',
-    title: 'Quotation',
-    subtitle: 'View, confirm & convert quotations to SO',
-    icon: 'description',
-    color: '#10B981',
-    bg: '#D1FAE5',
-  },
-  {
-    id: 'saleInvoiceList',
-    title: 'Sale Invoices',
-    subtitle: 'Manage invoiced & paid orders',
-    icon: 'request-quote',
-    color: '#7C3AED',
-    bg: '#EDE9FE',
-  },
-  {
-    id: 'rentalInvoiceList',
-    title: 'Rental Invoice',
-    subtitle: 'Convert rental contracts to invoice',
-    icon: 'print',
-    color: '#06B6D4',
-    bg: '#CFFAFE',
-  },
-  {
-    id: 'purchaseOrderList',
-    title: 'Purchase Orders',
-    subtitle: 'Create & track supplier purchase orders',
+    id: 'purchaseOrder',
+    title: 'Purchase Order',
+    subtitle: 'Purchase Orders, PO Details',
     icon: 'shopping-bag',
     color: '#F59E0B',
     bg: '#FEF3C7',
   },
   {
-    id: 'vendorPayables',
-    title: 'Vendor Payables',
-    subtitle: 'Track & pay outstanding vendor bills',
-    icon: 'account-balance-wallet',
+    id: 'accountReceived',
+    title: 'Account Received',
+    subtitle: 'Quotation, Sale Orders, Sale Invoices, Rental Invoice, Invoice Details',
+    icon: 'account-balance',
     color: '#EF4444',
     bg: '#FEE2E2',
+  },
+  {
+    id: 'accountPay',
+    title: 'Account Pay',
+    subtitle: 'Vendor Payables, Expenses, Income Statement',
+    icon: 'payments',
+    color: '#F59E0B',
+    bg: '#FEF3C7',
   },
   {
     id: 'cashierManage',
@@ -189,41 +154,46 @@ const CARDS: ManageCard[] = [
     color: '#0891B2',
     bg: '#CFFAFE',
   },
+];
+
+interface ManageScreenProps {
+  userRole?: string;
+}
+
+const MANAGER_MAINTENANCE_CARDS: ManageCard[] = [
+  { id: 'vendorList',  title: 'Vendor',   subtitle: 'Manage suppliers & vendor contacts', icon: 'store',       color: '#06B6D4', bg: '#CFFAFE' },
+  { id: 'productList', title: 'Products', subtitle: 'View & add products to the catalog', icon: 'inventory-2', color: '#2563EB', bg: '#DBEAFE' },
+];
+
+const MANAGER_HUB_CARDS: ManageCard[] = [
   {
-    id: 'expenses',
-    title: 'Expenses',
-    subtitle: 'Record & track operating expenses by category',
-    icon: 'receipt-long',
-    color: '#EF4444',
-    bg: '#FEE2E2',
-  },
-  {
-    id: 'incomeStatement',
-    title: 'Income Statement',
-    subtitle: 'Revenue, expenses & net profit by date range',
-    icon: 'bar-chart',
-    color: '#16A34A',
-    bg: '#DCFCE7',
-  },
-  {
-    id: 'invoiceDetailExport',
-    title: 'Invoice Details',
-    subtitle: 'Export invoice details to Excel by date & campus',
-    icon: 'table-view',
-    color: '#0369A1',
-    bg: '#E0F2FE',
-  },
-  {
-    id: 'poExport',
-    title: 'PO Details',
-    subtitle: 'Export purchase order details to Excel by date & location',
-    icon: 'table-view',
+    id: 'masterData',
+    title: 'Maintenance',
+    subtitle: 'Campus, Location, User, UOM, Vendor',
+    icon: 'folder-special',
     color: '#7C3AED',
     bg: '#EDE9FE',
   },
+  {
+    id: 'inventoryControl',
+    title: 'Inventory Controls',
+    subtitle: 'Products, Movement Items',
+    icon: 'inventory',
+    color: '#2563EB',
+    bg: '#DBEAFE',
+  },
+  {
+    id: 'purchaseOrder',
+    title: 'Purchase Order',
+    subtitle: 'Purchase Orders, PO Details',
+    icon: 'shopping-bag',
+    color: '#F59E0B',
+    bg: '#FEF3C7',
+  },
 ];
 
-const ManageScreen: React.FC = () => {
+const ManageScreen: React.FC<ManageScreenProps> = ({ userRole }) => {
+  const isOwner = userRole === 'owner';
   const [view, setView] = useState<ManageView>('hub');
   const viewRef = useRef(view);
   viewRef.current = view;
@@ -242,6 +212,131 @@ const ManageScreen: React.FC = () => {
   const [editUom, setEditUom] = useState<ApiUom | null>(null);
   const [viewInvoice, setViewInvoice] = useState<ApiRentalInvoiceHeader | null>(null);
 
+  if (view === 'masterData') {
+    return (
+      <View style={styles.safe}>
+        <AppBar title="Maintenance" subtitle="Campus, Location, User, UOM, Vendor" titleAlign="left" showBack onBack={() => setView('hub')} />
+        <FlatList
+          data={MASTER_DATA_CARDS}
+          keyExtractor={item => item.id}
+          contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
+          renderItem={({ item }) => (
+            <TouchableOpacity style={styles.row} activeOpacity={0.75} onPress={() => setView(item.id)}>
+              <View style={[styles.iconBox, { backgroundColor: item.bg }]}>
+                <Icon name={item.icon} size={22} color={item.color} />
+              </View>
+              <View style={styles.rowText}>
+                <AppText variant="bodyMedium" style={styles.rowTitle}>{item.title}</AppText>
+                <AppText variant="caption" color="textSecondary">{item.subtitle}</AppText>
+              </View>
+              <Icon name="chevron-right" size={20} color={Colors.textLight} />
+            </TouchableOpacity>
+          )}
+        />
+      </View>
+    );
+  }
+  if (view === 'accountPay') {
+    return (
+      <View style={styles.safe}>
+        <AppBar title="Account Pay" subtitle="Vendor Payables, Expenses, Income Statement" titleAlign="left" showBack onBack={() => setView('hub')} />
+        <FlatList
+          data={ACCOUNT_PAY_CARDS}
+          keyExtractor={item => item.id}
+          contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
+          renderItem={({ item }) => (
+            <TouchableOpacity style={styles.row} activeOpacity={0.75} onPress={() => setView(item.id)}>
+              <View style={[styles.iconBox, { backgroundColor: item.bg }]}>
+                <Icon name={item.icon} size={22} color={item.color} />
+              </View>
+              <View style={styles.rowText}>
+                <AppText variant="bodyMedium" style={styles.rowTitle}>{item.title}</AppText>
+                <AppText variant="caption" color="textSecondary">{item.subtitle}</AppText>
+              </View>
+              <Icon name="chevron-right" size={20} color={Colors.textLight} />
+            </TouchableOpacity>
+          )}
+        />
+      </View>
+    );
+  }
+  if (view === 'inventoryControl') {
+    return (
+      <View style={styles.safe}>
+        <AppBar title="Inventory Controls" subtitle="Products, Movement Items" titleAlign="left" showBack onBack={() => setView('hub')} />
+        <FlatList
+          data={INVENTORY_CONTROL_CARDS}
+          keyExtractor={item => item.id}
+          contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
+          renderItem={({ item }) => (
+            <TouchableOpacity style={styles.row} activeOpacity={0.75} onPress={() => setView(item.id)}>
+              <View style={[styles.iconBox, { backgroundColor: item.bg }]}>
+                <Icon name={item.icon} size={22} color={item.color} />
+              </View>
+              <View style={styles.rowText}>
+                <AppText variant="bodyMedium" style={styles.rowTitle}>{item.title}</AppText>
+                <AppText variant="caption" color="textSecondary">{item.subtitle}</AppText>
+              </View>
+              <Icon name="chevron-right" size={20} color={Colors.textLight} />
+            </TouchableOpacity>
+          )}
+        />
+      </View>
+    );
+  }
+  if (view === 'purchaseOrder') {
+    return (
+      <View style={styles.safe}>
+        <AppBar title="Purchase Order" subtitle="Purchase Orders, PO Details" titleAlign="left" showBack onBack={() => setView('hub')} />
+        <FlatList
+          data={PURCHASE_ORDER_CARDS}
+          keyExtractor={item => item.id}
+          contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
+          renderItem={({ item }) => (
+            <TouchableOpacity style={styles.row} activeOpacity={0.75} onPress={() => setView(item.id)}>
+              <View style={[styles.iconBox, { backgroundColor: item.bg }]}>
+                <Icon name={item.icon} size={22} color={item.color} />
+              </View>
+              <View style={styles.rowText}>
+                <AppText variant="bodyMedium" style={styles.rowTitle}>{item.title}</AppText>
+                <AppText variant="caption" color="textSecondary">{item.subtitle}</AppText>
+              </View>
+              <Icon name="chevron-right" size={20} color={Colors.textLight} />
+            </TouchableOpacity>
+          )}
+        />
+      </View>
+    );
+  }
+  if (view === 'accountReceived') {
+    return (
+      <View style={styles.safe}>
+        <AppBar title="Account Received" subtitle="Quotation, Sale Orders, Sale Invoices, Rental Invoice, Invoice Details" titleAlign="left" showBack onBack={() => setView('hub')} />
+        <FlatList
+          data={ACCOUNT_RECEIVED_CARDS}
+          keyExtractor={item => item.id}
+          contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
+          renderItem={({ item }) => (
+            <TouchableOpacity style={styles.row} activeOpacity={0.75} onPress={() => setView(item.id)}>
+              <View style={[styles.iconBox, { backgroundColor: item.bg }]}>
+                <Icon name={item.icon} size={22} color={item.color} />
+              </View>
+              <View style={styles.rowText}>
+                <AppText variant="bodyMedium" style={styles.rowTitle}>{item.title}</AppText>
+                <AppText variant="caption" color="textSecondary">{item.subtitle}</AppText>
+              </View>
+              <Icon name="chevron-right" size={20} color={Colors.textLight} />
+            </TouchableOpacity>
+          )}
+        />
+      </View>
+    );
+  }
   if (view === 'categoryList') {
     return (
       <CategoriesListScreen
@@ -266,7 +361,7 @@ const ManageScreen: React.FC = () => {
   if (view === 'productList') {
     return (
       <ProductsListScreen
-        onBack={() => setView('hub')}
+        onBack={() => setView('inventoryControl')}
         onCreate={() => setView('productCreate')}
         onEdit={p => { setEditProduct(p); setView('productEdit'); }}
       />
@@ -287,7 +382,7 @@ const ManageScreen: React.FC = () => {
   if (view === 'userList') {
     return (
       <UsersListScreen
-        onBack={() => setView('hub')}
+        onBack={() => setView('masterData')}
         onCreate={() => setView('userCreate')}
         onEdit={u => { setEditUser(u); setView('userEdit'); }}
       />
@@ -314,7 +409,7 @@ const ManageScreen: React.FC = () => {
   if (view === 'campusList') {
     return (
       <CampusListScreen
-        onBack={() => setView('hub')}
+        onBack={() => setView('masterData')}
         onCreate={() => setView('campusCreate')}
         onEdit={c => { setEditCampus(c); setView('campusEdit'); }}
       />
@@ -335,7 +430,7 @@ const ManageScreen: React.FC = () => {
   if (view === 'locationList') {
     return (
       <LocationListScreen
-        onBack={() => setView('hub')}
+        onBack={() => setView('masterData')}
         onCreate={() => setView('locationCreate')}
         onEdit={l => { setEditLocation(l); setView('locationEdit'); }}
       />
@@ -354,42 +449,42 @@ const ManageScreen: React.FC = () => {
     );
   }
   if (view === 'quotationList') {
-    return <QuotationListScreen onBack={() => setView('hub')} />;
+    return <QuotationListScreen onBack={() => setView('accountReceived')} />;
   }
   if (view === 'saleOrderList') {
-    return <SaleOrdersListScreen onBack={() => setView('hub')} />;
+    return <SaleOrdersListScreen onBack={() => setView('accountReceived')} />;
   }
   if (view === 'saleInvoiceList') {
-    return <SaleInvoiceListScreen onBack={() => setView('hub')} />;
+    return <SaleInvoiceListScreen onBack={() => setView('accountReceived')} />;
   }
   if (view === 'purchaseOrderList') {
-    return <PurchaseOrderListScreen onBack={() => setView('hub')} />;
+    return <PurchaseOrderListScreen onBack={() => setView('purchaseOrder')} />;
   }
   if (view === 'movementItems') {
-    return <MovementItemsScreen onBack={() => setView('hub')} />;
+    return <MovementItemsScreen onBack={() => setView('inventoryControl')} />;
   }
   if (view === 'vendorPayables') {
-    return <VendorPayablesScreen onBack={() => setView('hub')} />;
+    return <VendorPayablesScreen onBack={() => setView('accountPay')} />;
   }
   if (view === 'cashierManage') {
     return <CashierManageScreen onBack={() => setView('hub')} />;
   }
   if (view === 'incomeStatement') {
-    return <IncomeStatementScreen onBack={() => setView('hub')} />;
+    return <IncomeStatementScreen onBack={() => setView('accountPay')} />;
   }
   if (view === 'expenses') {
-    return <ExpensesScreen onBack={() => setView('hub')} />;
+    return <ExpensesScreen onBack={() => setView('accountPay')} />;
   }
   if (view === 'invoiceDetailExport') {
-    return <InvoiceDetailExportScreen onBack={() => setView('hub')} />;
+    return <InvoiceDetailExportScreen onBack={() => setView('accountReceived')} />;
   }
   if (view === 'poExport') {
-    return <POExportScreen onBack={() => setView('hub')} />;
+    return <POExportScreen onBack={() => setView('purchaseOrder')} />;
   }
   if (view === 'vendorList') {
     return (
       <VendorListScreen
-        onBack={() => setView('hub')}
+        onBack={() => setView('masterData')}
         onCreate={() => setView('vendorCreate')}
         onEdit={v => { setEditVendor(v); setView('vendorEdit'); }}
       />
@@ -410,7 +505,7 @@ const ManageScreen: React.FC = () => {
   if (view === 'uomList') {
     return (
       <UomListScreen
-        onBack={() => setView('hub')}
+        onBack={() => setView('masterData')}
         onCreate={() => setView('uomCreate')}
         onEdit={u => { setEditUom(u); setView('uomEdit'); }}
       />
@@ -431,7 +526,7 @@ const ManageScreen: React.FC = () => {
   if (view === 'rentalInvoiceList') {
     return (
       <RentalInvoiceListScreen
-        onBack={() => setView('hub')}
+        onBack={() => setView('accountReceived')}
         onCreate={() => setView('rentalInvoiceCreate')}
         onView={inv => { setViewInvoice(inv); setView('rentalInvoiceView'); }}
       />
@@ -458,7 +553,7 @@ const ManageScreen: React.FC = () => {
       <AppBar title="Manage" subtitle="Configure your workspace" titleAlign="left" />
 
       <FlatList
-        data={CARDS}
+        data={isOwner ? CARDS : MANAGER_HUB_CARDS}
         keyExtractor={item => item.id}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}

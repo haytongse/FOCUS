@@ -121,10 +121,12 @@ const CustomTabBar: React.FC<BottomTabBarProps> = ({ state, navigation }) => {
 interface BottomTabNavigatorProps {
   user: User | null;
   onLogout: () => void;
+  fcmToken?: string | null;
 }
 
-const BottomTabNavigator: React.FC<BottomTabNavigatorProps> = ({ user, onLogout }) => {
-  const isOwner = user?.role === 'owner';
+const BottomTabNavigator: React.FC<BottomTabNavigatorProps> = ({ user, onLogout, fcmToken }) => {
+  const isOwner   = user?.role === 'owner';
+  const isManager = user?.role === 'manager';
 
   return (
     <Tab.Navigator
@@ -132,7 +134,7 @@ const BottomTabNavigator: React.FC<BottomTabNavigatorProps> = ({ user, onLogout 
       screenOptions={{ headerShown: false }}
     >
       <Tab.Screen name="Home">
-        {() => <HomeScreen user={user} />}
+        {() => <HomeScreen user={user} fcmToken={fcmToken} />}
       </Tab.Screen>
 
       {/* POS tab — owner only, between Home and Menu */}
@@ -146,10 +148,14 @@ const BottomTabNavigator: React.FC<BottomTabNavigatorProps> = ({ user, onLogout 
         {() => <MenuScreen user={user} />}
       </Tab.Screen>
 
-      <Tab.Screen name="Manage" component={ManageScreen} />
+      {(isOwner || isManager) && (
+        <Tab.Screen name="Manage">
+          {() => <ManageScreen userRole={user?.role} />}
+        </Tab.Screen>
+      )}
 
       <Tab.Screen name="Profile">
-        {() => <ProfileScreen user={user} onLogout={onLogout} />}
+        {() => <ProfileScreen user={user} onLogout={onLogout} fcmToken={fcmToken} />}
       </Tab.Screen>
     </Tab.Navigator>
   );

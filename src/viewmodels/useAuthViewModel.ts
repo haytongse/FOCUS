@@ -11,6 +11,7 @@ interface LoginResult {
 interface AuthViewModel extends AuthState {
   loading: boolean;
   error: string | null;
+  fcmToken: string | null;
   login: (credentials: LoginCredentials) => Promise<LoginResult | null>;
   logout: () => void;
   clearError: () => void;
@@ -66,29 +67,37 @@ export const useAuthViewModel = (): AuthViewModel => {
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fcmToken, setFcmToken] = useState<string | null>(null);
 
   const login = useCallback(
     async (credentials: LoginCredentials): Promise<LoginResult | null> => {
       setLoading(true);
       setError(null);
       try {
-        const fcmToken = await getFcmToken();
-        const result = await loginApi(credentials.email, credentials.password, fcmToken);
+        console.log('[Auth] Starting login for:', credentials.email);
+        const deviceFcmToken = await getFcmToken();
+        console.log('[Auth] FCM token to send:', deviceFcmToken ?? 'none');
+        const result = await loginApi(credentials.email, credentials.password, deviceFcmToken);
         const mappedUser: User = {
           id: String(result.user.id),
           name: result.user.name,
           email: result.user.email ?? '',
-          role: ((result.user.role ?? 'admin').toLowerCase() as User['role']),
+          role: ((result.user.role ?? 'owner').toLowerCase() as User['role']),
           branch: result.user.branch,
         };
+        console.log('[Auth] Login success — user:', mappedUser.id, 'name:', mappedUser.name, 'role:', mappedUser.role);
         setAuthToken(result.token);
         if (result.refreshToken) {
           setRefreshToken(result.refreshToken, result.expiresIn);
         }
         setUser(mappedUser);
         setToken(result.token);
+        // Prefer the device token we just retrieved; fall back to server-returned token
+        const resolvedFcmToken = deviceFcmToken ?? result.fcmToken ?? null;
+        if (resolvedFcmToken) setFcmToken(resolvedFcmToken);
         return { user: mappedUser, token: result.token };
       } catch (err: any) {
+        console.log('[Auth] Login error:', err?.response?.status, err?.message);
         setError(humaniseLoginError(err));
         return null;
       } finally {
@@ -103,6 +112,7 @@ export const useAuthViewModel = (): AuthViewModel => {
     setUser(null);
     setToken(null);
     setError(null);
+    setFcmToken(null);
   }, []);
 
   const clearError = useCallback(() => setError(null), []);
@@ -113,6 +123,7 @@ export const useAuthViewModel = (): AuthViewModel => {
     isAuthenticated: !!token,
     loading,
     error,
+    fcmToken,
     login,
     logout,
     clearError,

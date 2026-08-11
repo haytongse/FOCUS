@@ -16,7 +16,7 @@ import { useAuthViewModel } from '../../viewmodels/useAuthViewModel';
 import { User } from '../../models/User';
 
 interface LoginScreenProps {
-  onLoginSuccess: (user: User, token: string) => void;
+  onLoginSuccess: (user: User, token: string, fcmToken?: string | null) => void;
 }
 
 const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
@@ -25,7 +25,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
 
-  const { login, loading, error, clearError } = useAuthViewModel();
+  const { login, loading, error, clearError, fcmToken: authFcmToken } = useAuthViewModel();
 
   useEffect(() => {
     if (error) {
@@ -62,7 +62,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     if (!validate()) return;
     const result = await login({ email: email.trim(), password });
     if (result) {
-      onLoginSuccess(result.user, result.token);
+      onLoginSuccess(result.user, result.token, authFcmToken);
     }
   };
 
