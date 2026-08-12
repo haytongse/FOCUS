@@ -5,6 +5,17 @@ import AppNavigator from './src/navigation/AppNavigator';
 import { AlertProvider } from './src/components/AppAlert';
 import Colors from './src/theme/colors';
 import { requestNotificationPermission } from './src/services/fcmService';
+import * as Notifications from 'expo-notifications';
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
 
 function App() {
   useEffect(() => {

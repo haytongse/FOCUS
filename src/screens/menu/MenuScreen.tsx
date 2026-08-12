@@ -36,6 +36,7 @@ import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
 import { createSalesOrderApi, getSalesOrderApi, uploadDirectApi, uploadSaleOrderSignatureApi, getOrgId, createQuotationApi, updateSalesOrderStatusApi, createInvoiceHeaderApi, getLocationsApi, ApiLocation } from '../../services/focusApi';
+import { notifyInvoiceCreated } from '../../services/fcmService';
 import { User } from '../../models/User';
 
 // ─── Animated Confirm Icon ────────────────────────────────────────────────────
@@ -708,6 +709,7 @@ const MenuScreen: React.FC<{ user?: User | null }> = ({ user }) => {
           dueAt: invDueAt ? formatOrderDate(invDueAt) : undefined,
         };
         const inv = await createInvoiceHeaderApi(invPayload);
+        notifyInvoiceCreated(inv.invoiceNumber ?? inv.id, inv.totalCents, invPayload.rateUsed);
 
         // Upload signature (non-fatal)
         try {

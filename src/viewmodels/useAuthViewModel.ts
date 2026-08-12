@@ -74,9 +74,7 @@ export const useAuthViewModel = (): AuthViewModel => {
       setLoading(true);
       setError(null);
       try {
-        console.log('[Auth] Starting login for:', credentials.email);
         const deviceFcmToken = await getFcmToken();
-        console.log('[Auth] FCM token to send:', deviceFcmToken ?? 'none');
         const result = await loginApi(credentials.email, credentials.password, deviceFcmToken);
         const mappedUser: User = {
           id: String(result.user.id),
@@ -85,7 +83,6 @@ export const useAuthViewModel = (): AuthViewModel => {
           role: ((result.user.role ?? 'owner').toLowerCase() as User['role']),
           branch: result.user.branch,
         };
-        console.log('[Auth] Login success — user:', mappedUser.id, 'name:', mappedUser.name, 'role:', mappedUser.role);
         setAuthToken(result.token);
         if (result.refreshToken) {
           setRefreshToken(result.refreshToken, result.expiresIn);
@@ -97,7 +94,6 @@ export const useAuthViewModel = (): AuthViewModel => {
         if (resolvedFcmToken) setFcmToken(resolvedFcmToken);
         return { user: mappedUser, token: result.token };
       } catch (err: any) {
-        console.log('[Auth] Login error:', err?.response?.status, err?.message);
         setError(humaniseLoginError(err));
         return null;
       } finally {

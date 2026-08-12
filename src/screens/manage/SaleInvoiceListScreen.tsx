@@ -58,6 +58,7 @@ import {
   ApiInvoiceSummary,
   ApiUom,
 } from '../../services/focusApi';
+import { notifyInvoiceCreated } from '../../services/fcmService';
 
 interface Props {
   onBack: () => void;
@@ -1915,6 +1916,7 @@ const onRefresh = () => { setRefreshing(true); load(true); };
           const inv = await createInvoiceHeaderApi(payload);
           created.push(inv.invoiceNumber ?? inv.id);
           invoicedSoIds.push(...group.soIds);
+          notifyInvoiceCreated(inv.invoiceNumber ?? inv.id, inv.totalCents, payload.rateUsed);
         } catch (err: any) {
           failed++;
           failedErrors.push(err?.message ?? 'Unknown error');

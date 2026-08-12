@@ -19,7 +19,7 @@ import { useProfileViewModel } from '../../viewmodels/useProfileViewModel';
 import { User } from '../../models/User';
 import { getUsersApi, ApiUser } from '../../services/focusApi';
 import { getFcmToken } from '../../services/fcmService';
-import { sendTestPushApi } from '../../services/focusApi';
+import * as Notifications from 'expo-notifications';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -159,20 +159,34 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ user, onLogout, fcmToken:
     if (propFcmToken) {
       setFcmToken(propFcmToken);
       setFcmChecked(true);
+    } else {
+      // Fallback: fetch directly from Firebase if prop not available
+      getFcmToken().then(token => {
+        if (token) setFcmToken(token);
+        setFcmChecked(true);
+      });
     }
   }, [propFcmToken]);
 
   const handleNotificationsPress = async () => {
     setFcmLoading(true);
     try {
-      const token = fcmToken ?? (await getFcmToken());
-      if (token) {
-        await sendTestPushApi(token);
-      } else {
-        Alert.alert('No Token', 'Push notifications are not available on this device.');
+      const { status } = await Notifications.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Please allow notifications in Settings.');
+        return;
       }
-    } catch {
-      Alert.alert('Error', 'Failed to send push notification.');
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: 'Focus ERP',
+          body: 'Push notifications are working!',
+          sound: true,
+        },
+        trigger: null, // show immediately
+      });
+    } catch (err: any) {
+      console.warn('[Push] Error:', err?.message ?? err);
+      Alert.alert('Error', err?.message ?? 'Failed to send notification');
     } finally {
       setFcmLoading(false);
     }

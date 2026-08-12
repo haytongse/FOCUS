@@ -20,6 +20,7 @@ import AppText from '../../components/AppText';
 import AppBar from '../../components/AppBar';
 import { useAlert } from '../../components/AppAlert';
 import { getSalesOrdersApi, getSalesOrderApi, getAllProductsApi, getCampusesApi, getSaleOrderSignaturesApi, updateSalesOrderStatusApi, createInvoiceHeaderApi, createSalesOrderApi, getUomsApi, ApiSalesOrder, ApiProduct, ApiCampus, ApiUom } from '../../services/focusApi';
+import { notifyInvoiceCreated } from '../../services/fcmService';
 import * as Print from 'expo-print';
 import LOGO_BASE64 from '../../logo/logoBase64';
 import DatePickerModal from '../../components/DatePickerModal';
@@ -1059,6 +1060,7 @@ const SaleOrdersListScreen: React.FC<Props> = ({ onBack }) => {
         };
         const inv = await createInvoiceHeaderApi(payload);
         created.push(inv.invoiceNumber ?? inv.id);
+        notifyInvoiceCreated(inv.invoiceNumber ?? inv.id, inv.totalCents, payload.rateUsed);
       } catch (err: any) {
         failed++;
       }
