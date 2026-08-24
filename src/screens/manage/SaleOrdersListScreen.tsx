@@ -20,11 +20,10 @@ import AppText from '../../components/AppText';
 import AppBar from '../../components/AppBar';
 import { useAlert } from '../../components/AppAlert';
 import { getSalesOrdersApi, getSalesOrderApi, getAllProductsApi, getCampusesApi, getSaleOrderSignaturesApi, updateSalesOrderStatusApi, createInvoiceHeaderApi, createSalesOrderApi, getUomsApi, ApiSalesOrder, ApiProduct, ApiCampus, ApiUom } from '../../services/focusApi';
-import { notifyInvoiceCreated } from '../../services/fcmService';
 import * as Print from 'expo-print';
 import LOGO_BASE64 from '../../logo/logoBase64';
 import DatePickerModal from '../../components/DatePickerModal';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
 import XLSX from 'xlsx';
@@ -138,7 +137,7 @@ const SO_CSS = `
   .sig-img  { display:block; max-width:100%; max-height:120px; object-fit:contain; margin:4px auto 0; }
 `;
 
-// Build a single SO page div for one order
+// Build one or more SO page divs for one order (multi-page when forPrint=true)
 const buildInvoicePage = (
   order: ApiSalesOrder,
   productMap: Record<string, ApiProduct>,
@@ -191,14 +190,17 @@ const buildInvoicePage = (
   const customerEn  = order.customerOrgName ?? order.customerOrg?.nameEn ?? order.customerOrg?.name ?? '';
   const refNo       = order.referenceNumber ?? order.ref ?? order.orderNumber ?? order.id;
 
-  const MAX_ROWS    = forPrint ? 0 : 12;
-  const fillerCount = Math.max(0, MAX_ROWS - items.length);
   const fillerCols  = hasDiscount ? 9 : 7;
-  const fillerRows  = Array.from({ length: fillerCount })
-    .map(() => `<tr>${Array.from({ length: fillerCols }).map(() => '<td></td>').join('')}</tr>`)
-    .join('');
 
-  const dataRows = items.map(it => `
+  const colgroup = hasDiscount
+    ? `<colgroup><col style="width:50px"/><col style="width:120px"/><col/><col style="width:36px"/><col style="width:48px"/><col style="width:30px"/><col style="width:46px"/><col style="width:40px"/><col style="width:54px"/></colgroup>`
+    : `<colgroup><col style="width:50px"/><col style="width:120px"/><col/><col style="width:40px"/><col style="width:56px"/><col style="width:40px"/><col style="width:64px"/></colgroup>`;
+
+  const thead = hasDiscount
+    ? `<tr><th>No</th><th>Barcode</th><th class="l">Description</th><th>Unit</th><th>Ori Price</th><th>Dis</th><th>Price</th><th>Qty</th><th>Amount</th></tr>`
+    : `<tr><th>No</th><th>Barcode</th><th class="l">Description</th><th>Unit</th><th>Price</th><th>Qty</th><th>Amount</th></tr>`;
+
+  const buildRows = (chunk: typeof items) => chunk.map(it => `
     <tr>
       <td class="c"><span class="no-badge">${it.no}</span></td>
       <td class="c" style="font-size:14px;">${it.barcode}</td>
@@ -211,17 +213,7 @@ const buildInvoicePage = (
       <td class="r">$${(it.totalCents / 100).toFixed(2)}</td>
     </tr>`).join('');
 
-  const colgroup = hasDiscount
-    ? `<colgroup><col style="width:50px"/><col style="width:120px"/><col/><col style="width:36px"/><col style="width:48px"/><col style="width:30px"/><col style="width:46px"/><col style="width:40px"/><col style="width:54px"/></colgroup>`
-    : `<colgroup><col style="width:50px"/><col style="width:120px"/><col/><col style="width:40px"/><col style="width:56px"/><col style="width:40px"/><col style="width:64px"/></colgroup>`;
-
-  const thead = hasDiscount
-    ? `<tr><th>No</th><th>Barcode</th><th class="l">Description</th><th>Unit</th><th>Ori Price</th><th>Dis</th><th>Price</th><th>Qty</th><th>Amount</th></tr>`
-    : `<tr><th>No</th><th>Barcode</th><th class="l">Description</th><th>Unit</th><th>Price</th><th>Qty</th><th>Amount</th></tr>`;
-
-  return `
-<div class="page">
-  <div class="content">
+  const fullHeader = `
     <div class="hdr">
       <div class="logo"><img src="${LOGO_BASE64}"/></div>
       <div class="hdr-mid">
@@ -241,56 +233,193 @@ const buildInvoicePage = (
         <b>Ref No:</b> ${refNo}<br/>
         <b>Status:</b> ${(order.status ?? '').toUpperCase()}
       </div>
-    </div>
-    <div class="tbl-wrap">
-      <table>
-        ${colgroup}
-        <thead>${thead}</thead>
-        <tbody>
-          ${dataRows}
-          ${fillerRows}
-        </tbody>
-      </table>
-    </div>
+    </div>`;
+
+  const totalsHtml = `
     <div class="totals">
       <div class="totals-row"><span class="totals-lbl">Sub Total</span><span class="totals-val">${fmtCents(subtotalCents)}</span></div>
       ${hasDiscount ? `<div class="totals-row totals-disc"><span class="totals-lbl">Discount${parseFloat(discPct) > 0 ? ` (${discPct}%)` : ''}</span><span class="totals-val">- ${fmtCents(discountCents)}</span></div>` : ''}
       <div class="totals-row totals-grand"><span class="totals-lbl">Grand Total</span><span class="totals-val">${fmtCents(grandTotalCents)}</span></div>
-    </div>
-  </div>
+    </div>`;
+
+  const footerHtml = `
   <div class="footer">
     <div class="sig-section">
       <div class="sig-col"><div class="sig-line">${sig1 ? `<img class="sig-img" src="${sig1}"/>` : ''}</div><div class="sig-lbl">Prepare By${date1 ? `<br/><span style="font-size:12px;font-weight:400;color:#555;">${date1}</span>` : ''}</div></div>
       <div class="sig-col"><div class="sig-line">${sig2 ? `<img class="sig-img" src="${sig2}"/>` : ''}</div><div class="sig-lbl">Check By${date2 ? `<br/><span style="font-size:12px;font-weight:400;color:#555;">${date2}</span>` : ''}</div></div>
       <div class="sig-col"><div class="sig-line">${sig3 ? `<img class="sig-img" src="${sig3}"/>` : ''}</div><div class="sig-lbl">Received By${date3 ? `<br/><span style="font-size:12px;font-weight:400;color:#555;">${date3}</span>` : ''}</div></div>
     </div>
+  </div>`;
+
+  // ── Preview (single fixed-height A5 page) ────────────────────────────────
+  if (!forPrint) {
+    const MAX_ROWS    = 12;
+    const fillerCount = Math.max(0, MAX_ROWS - items.length);
+    const fillerRows  = Array.from({ length: fillerCount })
+      .map(() => `<tr>${Array.from({ length: fillerCols }).map(() => '<td></td>').join('')}</tr>`)
+      .join('');
+    return `
+<div class="page">
+  <div class="content">
+    ${fullHeader}
+    <div class="tbl-wrap"><table>${colgroup}<thead>${thead}</thead><tbody>${buildRows(items)}${fillerRows}</tbody></table></div>
+    ${totalsHtml}
+  </div>
+  ${footerHtml}
+</div>`;
+  }
+
+  // ── Print / PDF: single-flow layout — iOS WebKit paginates automatically ─────
+  // No manual chunking: rows use page-break-inside:avoid so iOS never splits a row
+  // across pages, and the totals+sigs block stays together on whatever page it lands on.
+  const allRows = items.map((it, idx) => `
+  <div class="p-row${idx % 2 === 1 ? ' p-alt' : ''}">
+    <div class="pc pc-no c">${it.no}</div>
+    <div class="pc pc-bar">${it.barcode || '—'}</div>
+    <div class="pc pc-nam"><span class="iname">${it.description}</span></div>
+    <div class="pc pc-unit c">${it.unit || '—'}</div>
+    ${hasDiscount ? `<div class="pc pc-ori r">$${(it.orinCents / 100).toFixed(2)}</div>` : ''}
+    ${hasDiscount ? `<div class="pc pc-dis c" style="font-size:9px;">${parseFloat(it.disPct) > 0 ? `${it.disPct}%` : '<span style="color:#ccc;">—</span>'}</div>` : ''}
+    <div class="pc pc-pri r">$${(it.afterDiscCents / 100).toFixed(2)}</div>
+    <div class="pc pc-qty c">${it.qty}</div>
+    <div class="pc pc-amt r">$${(it.totalCents / 100).toFixed(2)}</div>
+  </div>`).join('');
+
+  return `
+<div class="page">
+  <div class="p-hdr">
+    <div class="logo-w"><img src="${LOGO_BASE64}"/></div>
+    <div class="co-b">
+      <div class="co-n">${COMPANY.name}</div>
+      <div class="co-s">${COMPANY.addr1}, ${COMPANY.addr2} | ${COMPANY.contact}</div>
+    </div>
+  </div>
+  <div class="so-title-wrap"><span class="so-title-txt">SALE ORDER</span></div>
+  <div class="p-hr"></div>
+  <div class="irow2">
+    <div class="icard">
+      <div class="ichdr">Order Info</div>
+      <div class="ifield"><span class="ilbl">Campus</span><span class="ival">${campusCode}</span></div>
+      ${customerKh ? `<div class="ifield"><span class="ilbl">Customer</span><span class="ival">${customerKh}</span></div>` : ''}
+      ${customerEn ? `<div class="ifield"><span class="ilbl"></span><span class="ival" style="font-size:9px;color:#555;">${customerEn}</span></div>` : ''}
+      ${order.note ? `<div class="ifield"><span class="ilbl">Note</span><span class="ival">${order.note}</span></div>` : ''}
+    </div>
+    <div class="icard">
+      <div class="ichdr">Details</div>
+      <div class="ifield"><span class="ilbl">Ref No</span><span class="ival">${refNo}</span></div>
+      <div class="ifield"><span class="ilbl">Date</span><span class="ival">${fmtDate(order.createdAt)}</span></div>
+      <div class="ifield"><span class="ilbl">Status</span><span class="ival">${(order.status ?? '').toUpperCase()}</span></div>
+    </div>
+  </div>
+  <div class="p-tbl">
+    <div class="p-row p-hdr-row">
+      <div class="pc pc-no c">No</div>
+      <div class="pc pc-bar">Barcode</div>
+      <div class="pc pc-nam">Description</div>
+      <div class="pc pc-unit c">Unit</div>
+      ${hasDiscount ? '<div class="pc pc-ori r">Ori Price</div>' : ''}
+      ${hasDiscount ? '<div class="pc pc-dis c">Dis</div>' : ''}
+      <div class="pc pc-pri r">Price</div>
+      <div class="pc pc-qty c">Qty</div>
+      <div class="pc pc-amt r">Amount</div>
+    </div>
+    ${allRows}
+    <div class="p-row p-sub-row" style="page-break-inside:avoid;break-inside:avoid;">
+      <div class="pc pc-lbl">Sub Total</div>
+      <div class="pc pc-amt r">${fmtCents(subtotalCents)}</div>
+    </div>
+    ${hasDiscount ? `
+    <div class="p-row p-disc-row" style="page-break-inside:avoid;break-inside:avoid;">
+      <div class="pc pc-lbl">Discount${parseFloat(discPct) > 0 ? ` (${discPct}%)` : ''}</div>
+      <div class="pc pc-amt r">- ${fmtCents(discountCents)}</div>
+    </div>` : ''}
+    <div class="p-row p-grand-row" style="page-break-inside:avoid;break-inside:avoid;">
+      <div class="pc pc-lbl">Grand Total</div>
+      <div class="pc pc-amt r">${fmtCents(grandTotalCents)}</div>
+    </div>
+  </div>
+  <div class="sig-sec">
+    <div class="sig-col">
+      <div class="sig-line"></div>
+      <div class="sig-lbl">Prepare By</div>
+      ${date1 ? `<div class="sig-date">${date1}</div>` : ''}
+    </div>
+    <div class="sig-col">
+      <div class="sig-line"></div>
+      <div class="sig-lbl">Check By</div>
+      ${date2 ? `<div class="sig-date">${date2}</div>` : ''}
+    </div>
+    <div class="sig-col">
+      <div class="sig-line"></div>
+      <div class="sig-lbl">Received By</div>
+      ${date3 ? `<div class="sig-date">${date3}</div>` : ''}
+    </div>
   </div>
 </div>`;
 };
 
-// Full multi-page HTML document — one SO page per order
-const SO_PRINT_CSS = `
-  @page { size: A4 portrait; margin: 10mm; }
-  html, body { width:794px; font-size:14px; }
-  .page { width:794px; height:277mm; padding:20px 40px 185px; overflow:hidden; }
-  .content { position:relative; overflow:visible; }
-  .footer { position:absolute; bottom:0; left:0; right:0; padding:0 40px 14px; background:#fff; }
-  .co-name { font-size:15px; }
-  .info-box { font-size:14px; }
-  thead th { font-size:15px; }
-  tbody td { font-size:12px; }
+// Shared invoice-style print classes (used by both SO_PRINT_CSS and SO_PDF_CSS)
+const SO_PRINT_SHARED = `
+  *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  html, body { width:794px; font-family:Times,'Times New Roman',serif; font-size:12px; color:#212121; background:#fff; }
+  .page { width:794px; overflow:visible; padding:0 10mm; }
+  /* header band */
+  .p-hdr { display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+  .logo-w { width:48px; height:48px; border-radius:8px; overflow:hidden; flex-shrink:0; }
+  .logo-w img { width:100%; height:100%; display:block; object-fit:cover; }
+  .co-b { flex:1; }
+  .co-n { font-size:13px; font-weight:900; letter-spacing:2px; text-transform:uppercase; color:#212121; }
+  .co-s { font-size:8px; color:#757575; line-height:1.5; margin-top:2px; }
+  .so-title-wrap { text-align:center; margin:6px 0; }
+  .so-title-txt { font-size:18px; font-weight:900; letter-spacing:4px; text-transform:uppercase; color:#1E40AF; border-bottom:2.5px solid #1E40AF; padding-bottom:2px; display:inline-block; }
+  .p-hr { border:none; border-top:1.5px solid #000; margin:4px 0 10px; }
+  /* info cards */
+  .irow2 { display:flex; gap:12px; margin-bottom:12px; }
+  .icard { flex:1; padding:8px 10px; border:1px solid #E0E0E0; border-radius:6px; background:#FAFAFA; }
+  .ichdr { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:#546E7A; padding-bottom:4px; margin-bottom:6px; border-bottom:2px solid #546E7A; }
+  .ifield { display:flex; gap:6px; margin-bottom:3px; }
+  .ilbl { font-size:9px; color:#9E9E9E; font-weight:600; width:70px; flex-shrink:0; }
+  .ival { font-size:10px; font-weight:700; color:#212121; }
+  /* div-based table */
+  .p-tbl { border:1px solid #BDBDBD; }
+  .p-row { display:flex; align-items:stretch; min-height:22px; page-break-inside:avoid; break-inside:avoid; }
+  .p-hdr-row { background:#EFF6FF; border-bottom:2px solid #BFDBFE; page-break-after:avoid; break-after:avoid; }
+  .p-alt { background:#FAFAFA; }
+  .pc { padding:3px 6px; font-size:11px; display:flex; align-items:center; border-right:1px solid #E8E8E8; overflow:hidden; white-space:nowrap; }
+  .pc:last-child { border-right:none; }
+  .p-hdr-row .pc { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:#1D4ED8; padding:5px 6px; }
+  .pc-no   { width:28px;  flex-shrink:0; justify-content:center; text-align:center; }
+  .pc-bar  { width:100px; flex-shrink:0; font-size:10px; }
+  .pc-nam  { flex:1; min-width:0; overflow:hidden; }
+  .pc-unit { width:36px;  flex-shrink:0; justify-content:center; text-align:center; }
+  .pc-ori  { width:56px;  flex-shrink:0; justify-content:flex-end; text-align:right; }
+  .pc-dis  { width:32px;  flex-shrink:0; justify-content:center; text-align:center; }
+  .pc-pri  { width:56px;  flex-shrink:0; justify-content:flex-end; text-align:right; }
+  .pc-qty  { width:30px;  flex-shrink:0; justify-content:center; text-align:center; }
+  .pc-amt  { width:68px;  flex-shrink:0; justify-content:flex-end; text-align:right; font-weight:700; }
+  .pc-lbl  { flex:1; text-align:right; padding-right:10px; }
+  .c { justify-content:center; text-align:center; }
+  .r { justify-content:flex-end; text-align:right; }
+  .iname { font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  /* totals rows */
+  .p-sub-row { background:#F5F5F5; }
+  .p-sub-row .pc { font-size:11px; font-weight:600; color:#546E7A; padding:5px 6px; }
+  .p-disc-row { background:#FFF8F8; }
+  .p-disc-row .pc { font-size:11px; font-weight:600; color:#E53935; padding:5px 6px; }
+  .p-grand-row { background:#1E3A5F; }
+  .p-grand-row .pc { border-right-color:#2D4A6A; color:#fff; font-size:14px; font-weight:800; padding:8px 6px; }
+  /* signature section */
+  .sig-sec { display:flex; margin-top:14px; border:1px solid #E0E0E0; border-radius:4px; overflow:hidden; page-break-inside:avoid; break-inside:avoid; }
+  .sig-col { flex:1; text-align:center; padding:6px 4px 8px; border-right:1px solid #E0E0E0; }
+  .sig-col:last-child { border-right:none; }
+  .sig-line { height:50px; overflow:hidden; margin:0 8px 4px; }
+  .sig-img { display:block; max-width:100%; max-height:100%; object-fit:contain; margin:0 auto; }
+  .sig-lbl { font-size:10px; font-weight:700; color:#333; border-top:1.5px solid #333; margin:0 8px; padding-top:3px; }
+  .sig-date { font-size:9px; color:#777; margin-top:2px; }
 `;
 
-const SO_PDF_CSS = `
-  @page { margin: 0; }
-  html, body { width:794px; font-size:14px; }
-  .page { width:794px; min-height:auto; padding:58px 78px 58px 78px; overflow:visible; display:block; }
-  .footer { position:relative; bottom:auto; left:auto; right:auto; padding:0 0 18px; margin-top:10px; }
-  .co-name { font-size:15px; }
-  .info-box { font-size:14px; }
-  thead th { font-size:15px; }
-  tbody td { font-size:12px; }
-`;
+const SO_PRINT_CSS = `@page { size: A4 portrait; margin: 10mm 0; } ${SO_PRINT_SHARED}`;
+const SO_PDF_CSS   = `@page { size: A4 portrait; margin: 0; } .page { min-height: 297mm; } ${SO_PRINT_SHARED}`;
 
 const buildInvoiceHTML = (
   orders: ApiSalesOrder[],
@@ -302,14 +431,24 @@ const buildInvoiceHTML = (
   forPDF = false,
   uomMap: Record<number, ApiUom> = {},
 ): string => {
-  const pages = orders.map(o => buildInvoicePage(o, productMap, campusMap, sigsMap[o.id] ?? [], forPrint || forPDF, uomMap)).join('\n');
+  const isPrintOrPDF = forPrint || forPDF;
+  const pages = orders.map(o => buildInvoicePage(o, productMap, campusMap, sigsMap[o.id] ?? [], isPrintOrPDF, uomMap)).join('\n');
   const extraCss = forPDF ? SO_PDF_CSS : forPrint ? SO_PRINT_CSS : '';
   if (previewWidth) {
+    // Preview: A5 card with SO_CSS base styles + scaler
     const scale     = previewWidth / A5_PX;
     const scaledH   = Math.round(A5_H * scale);
     const scalerCss = `html,body{width:${previewWidth}px;height:${scaledH}px;overflow:hidden;}
       .scaler{width:${A5_PX}px;height:${A5_H}px;transform:scale(${scale.toFixed(6)});transform-origin:top left;}`;
-    return `<!DOCTYPE html><html><head><meta charset="UTF-8"/><style>${SO_CSS}</style><style>${extraCss}</style><style>${scalerCss}</style></head><body><div class="scaler">${pages}</div></body></html>`;
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8"/><style>${SO_CSS}</style><style>${scalerCss}</style></head><body><div class="scaler">${pages}</div></body></html>`;
+  }
+  // Print/PDF: use ONLY the print CSS — SO_CSS has A5 height + 185px padding that would pollute print layout
+  if (isPrintOrPDF) {
+    const first      = orders[0];
+    const tCampus    = first ? (first.campusCode ?? campusMap[String(first.campusId)]?.campusCode ?? '') : '';
+    const tRef       = first ? (first.referenceNumber ?? first.ref ?? first.id ?? '') : '';
+    const docTitle   = [tCampus, tRef].filter(Boolean).join('-') || 'Sale Order';
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>${docTitle}</title><style>${extraCss}</style></head><body>${pages}</body></html>`;
   }
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"/><style>${SO_CSS}</style><style>${extraCss}</style></head><body>${pages}</body></html>`;
 };
@@ -630,56 +769,66 @@ const SaleOrdersListScreen: React.FC<Props> = ({ onBack }) => {
     }
   };
 
-  // Returns one PDF file path per selected order
-  const buildAndExport = async (): Promise<string[]> => {
-    const target = getTargetOrders();
+  type SOFetchResult = {
+    fullOrders: ApiSalesOrder[];
+    productMap: Record<string, ApiProduct>;
+    campusMap:  Record<string, ApiCampus>;
+    uomMap:     Record<number, ApiUom>;
+    sigsMap:    Record<string, Array<{ url: string; type: string; createdAt?: string }>>;
+  };
 
-    // Fetch everything fresh — doMap state may be stale
+  // Fetch all data needed to render SO invoices
+  const fetchSOData = async (): Promise<SOFetchResult> => {
+    const target = getTargetOrders();
     const [fullOrders, products, campuses, uoms] = await Promise.all([
       Promise.all(target.map(o => getSalesOrderApi(o.id).catch(() => o))),
       getAllProductsApi().catch(() => [] as ApiProduct[]),
       getCampusesApi().catch(() => [] as ApiCampus[]),
       getUomsApi().catch(() => [] as ApiUom[]),
     ]);
-
     const productMap: Record<string, ApiProduct> = {};
     products.forEach(p => { productMap[p.id] = p; });
-
     const campusMap: Record<string, ApiCampus> = {};
-    campuses.forEach(c => { campusMap[c.id] = c; });
-
+    campuses.forEach(c => { campusMap[String(c.id)] = c; });
     const uomMap: Record<number, ApiUom> = {};
     uoms.forEach(u => { uomMap[u.id] = u; });
 
-    // Fetch all signatures per order
     const sigResults = await Promise.all(
-      fullOrders.map(o => getSaleOrderSignaturesApi(o.id))
+      fullOrders.map(o => getSaleOrderSignaturesApi(o.id).catch(() => [])),
     );
-
-    // Convert every signature URL to base64 for PDF embedding
-    const freshSigsMap: Record<string, Array<{ url: string; type: string }>> = {};
+    const sigsMap: Record<string, Array<{ url: string; type: string; createdAt?: string }>> = {};
     for (let i = 0; i < fullOrders.length; i++) {
-      const rawSigs = sigResults[i];
-      if (rawSigs.length === 0) continue;
-      freshSigsMap[fullOrders[i].id] = await Promise.all(
-        rawSigs.map(async sig => ({
-          type: sig.type,
-          url:  (await fetchImageBase64(sig.signatureUrl)) ?? sig.signatureUrl,
-        }))
+      const raw = sigResults[i];
+      if (raw.length === 0) continue;
+      sigsMap[fullOrders[i].id] = await Promise.all(
+        raw.map(async sig => ({
+          type:      sig.type,
+          createdAt: sig.createdAt,
+          url:       (await fetchImageBase64(sig.signatureUrl)) ?? sig.signatureUrl,
+        })),
       );
     }
+    return { fullOrders, productMap, campusMap, uomMap, sigsMap };
+  };
+
+  // Returns one PDF file path per selected order
+  const buildAndExport = async (): Promise<string[]> => {
+    const { fullOrders, productMap, campusMap, uomMap, sigsMap } = await fetchSOData();
 
     // One PDF per order (sequential to avoid file-system conflicts)
     const paths: string[] = [];
     for (const order of fullOrders) {
-      const orderSigs = freshSigsMap[order.id] ?? [];
-      const html = buildInvoiceHTML([order], productMap, { [order.id]: orderSigs }, campusMap, false, undefined, true, uomMap);
-      const campusCode = order.campusId ? (campusMap[String(order.campusId)]?.campusCode ?? order.campusId) : '';
-      const refPart   = order.referenceNumber ?? order.ref ?? order.id;
-      const nameParts = [campusCode, refPart].filter(Boolean).join('-');
-      const name      = `${nameParts.replace(/[^a-zA-Z0-9]/g, '-')}-${Date.now()}`;
-      const result    = await Print.printToFileAsync({ html, width: 794, height: 1123 });
-      paths.push(result.uri);
+      const html = buildInvoiceHTML([order], productMap, { [order.id]: sigsMap[order.id] ?? [] }, campusMap, false, undefined, true, uomMap);
+      const campusCode = campusMap[String(order.campusId)]?.campusCode ?? order.campusId ?? '';
+      const refPart    = order.referenceNumber ?? order.ref ?? order.id;
+      const safeCampus = String(campusCode).replace(/[^a-zA-Z0-9]/g, '');
+      const safeRef    = String(refPart).replace(/[^a-zA-Z0-9-]/g, '-');
+      const fileName   = [safeCampus, safeRef].filter(Boolean).join('-') + '.pdf';
+      const result     = await Print.printToFileAsync({ html, width: 794, height: 1123 });
+      const namedUri   = `${FileSystem.cacheDirectory}${fileName}`;
+      await FileSystem.deleteAsync(namedUri, { idempotent: true });
+      await FileSystem.moveAsync({ from: result.uri, to: namedUri });
+      paths.push(namedUri);
     }
     return paths;
   };
@@ -901,41 +1050,11 @@ const SaleOrdersListScreen: React.FC<Props> = ({ onBack }) => {
   };
 
   const handlePrintPDF = async () => {
-    const target = getTargetOrders();
-    if (target.length === 0) { showAlert({ type: 'info', title: 'No Orders', message: 'Nothing to print.' }); return; }
+    if (getTargetOrders().length === 0) { showAlert({ type: 'info', title: 'No Orders', message: 'Nothing to print.' }); return; }
     setPrinting(true);
     try {
-      const { fullOrders, productMap: pMap, sigResults } = await buildAndExport().then(() => ({} as any)).catch(() => null) ?? {};
-      // Re-fetch since buildAndExport returns paths not data — rebuild HTML directly
-      const soIds = target.map(o => o.id);
-      const [fullOs, products, campuses, uomsLocal] = await Promise.all([
-        Promise.all(soIds.map(id => getSalesOrderApi(id))),
-        getAllProductsApi().catch(() => [] as ApiProduct[]),
-        getCampusesApi().catch(() => [] as ApiCampus[]),
-        getUomsApi().catch(() => [] as ApiUom[]),
-      ]);
-      const pMapLocal: Record<string, ApiProduct> = {};
-      products.forEach(p => { pMapLocal[p.id] = p; });
-      const cMapLocal: Record<string, ApiCampus> = {};
-      campuses.forEach(c => { cMapLocal[String(c.id)] = c; });
-      const uomMapLocal: Record<number, ApiUom> = {};
-      uomsLocal.forEach(u => { uomMapLocal[u.id] = u; });
-      const sigResultsLocal = await Promise.all(
-        fullOs.map(o => getSaleOrderSignaturesApi(o.id).catch(() => [])),
-      );
-      const sigsMap: Record<string, Array<{ url: string; type: string; createdAt?: string }>> = {};
-      for (let i = 0; i < fullOs.length; i++) {
-        const raw = sigResultsLocal[i];
-        if (raw.length === 0) continue;
-        sigsMap[fullOs[i].id] = await Promise.all(
-          raw.map(async sig => ({
-            type: sig.type,
-            createdAt: sig.createdAt,
-            url: (await fetchImageBase64(sig.signatureUrl)) ?? sig.signatureUrl,
-          })),
-        );
-      }
-      const html = buildInvoiceHTML(fullOs, pMapLocal, sigsMap, cMapLocal, true, undefined, false, uomMapLocal);
+      const { fullOrders, productMap, campusMap, uomMap, sigsMap } = await fetchSOData();
+      const html = buildInvoiceHTML(fullOrders, productMap, sigsMap, campusMap, true, undefined, false, uomMap);
       await Print.printAsync({ html });
     } catch (err: any) {
       if (err?.message !== 'User cancelled') {
@@ -1060,7 +1179,9 @@ const SaleOrdersListScreen: React.FC<Props> = ({ onBack }) => {
         };
         const inv = await createInvoiceHeaderApi(payload);
         created.push(inv.invoiceNumber ?? inv.id);
-        notifyInvoiceCreated(inv.invoiceNumber ?? inv.id, inv.totalCents, payload.rateUsed);
+        const soRefs = confirmOrders
+          .filter(o => group.soIds.includes(o.id))
+          .map(o => o.referenceNumber ?? o.ref ?? o.orderNumber ?? o.id);
       } catch (err: any) {
         failed++;
       }

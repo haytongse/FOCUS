@@ -15,6 +15,7 @@ import { MaterialIcons as Icon } from '@expo/vector-icons';
 import AppText from '../../components/AppText';
 import AppBar from '../../components/AppBar';
 import AppButton from '../../components/AppButton';
+import { useAlert } from '../../components/AppAlert';
 import {
   getSalesOrderApi,
   updateSalesOrderItemsApi,
@@ -75,6 +76,7 @@ const cents = (n: number) => `$${(n / 100).toFixed(2)}`;
 
 
 const SaleOrderDetailScreen: React.FC<Props> = ({ orderId, onBack }) => {
+  const { showAlert } = useAlert();
   const [order, setOrder]             = useState<ApiSalesOrder | null>(null);
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState<string | null>(null);
@@ -504,7 +506,17 @@ const SaleOrderDetailScreen: React.FC<Props> = ({ orderId, onBack }) => {
                 />
                 <AppButton
                   label="Save Changes"
-                  onPress={saveEdit}
+                  onPress={() => {
+                    showAlert({
+                      type: 'confirm',
+                      title: 'Save Changes',
+                      message: 'Are you sure you want to save changes to this order?',
+                      actions: [
+                        { label: 'Cancel', variant: 'outline' },
+                        { label: 'Save', variant: 'primary', onPress: saveEdit },
+                      ],
+                    });
+                  }}
                   variant="primary"
                   size="lg"
                   style={{ flex: 2 }}

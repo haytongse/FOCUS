@@ -160,7 +160,8 @@ interface MenuViewModel {
   clearOrder: () => void;
   confirmOrder: () => void;
   totalItems: number;
-  bulkImport: (rows: Array<{ sku: string; qty: number }>) => string[];
+  bulkImport: (rows: Array<{ sku: string; qty: number }>, itemOverride?: MenuItemModel[]) => string[];
+  loadAllItems: () => Promise<MenuItemModel[]>;
 }
 
 // ─── ViewModel ────────────────────────────────────────────────────────────────
@@ -398,13 +399,19 @@ export const useMenuViewModel = (): MenuViewModel => {
     setOrder(createEmptyOrder());
   }, []);
 
-  const bulkImport = useCallback((rows: Array<{ sku: string; qty: number }>): string[] => {
+  const bulkImport = useCallback((rows: Array<{ sku: string; qty: number }>, itemOverride?: MenuItemModel[]): string[] => {
+    // Build SKU map from all cached groups so items outside the current category are found
+    const skuMap = new Map<string, MenuItemModel>();
+    cache.current.forEach(items => items.forEach(item => { if (item.sku) skuMap.set(item.sku.toLowerCase(), item); }));
+    displayItems.forEach(item => { if (item.sku) skuMap.set(item.sku.toLowerCase(), item); });
+    (itemOverride ?? []).forEach(item => { if (item.sku) skuMap.set(item.sku.toLowerCase(), item); });
+
     const notFound: string[] = [];
     setOrder(prev => {
       let lines = [...prev.lines];
       for (const row of rows) {
         if (row.qty <= 0 || !row.sku.trim()) continue;
-        const item = displayItems.find(p => p.sku?.toLowerCase() === row.sku.toLowerCase().trim());
+        const item = skuMap.get(row.sku.toLowerCase().trim());
         if (!item) { notFound.push(row.sku); continue; }
         const existing = lines.find(l => l.item.id === item.id);
         if (existing) {
@@ -424,6 +431,22 @@ export const useMenuViewModel = (): MenuViewModel => {
       return { ...prev, lines, ...recalculate(lines) };
     });
     return notFound;
+  }, [displayItems]);
+
+  const loadAllItems = useCallback(async (): Promise<MenuItemModel[]> => {
+    // Return from cache if already loaded
+    const cached = cache.current.get(ALL_GROUP_ID);
+    if (cached && cached.length > 0) return cached;
+    try {
+      const products = await getAllProductsApi();
+      const catNameMap: Record<string, string> = {};
+      // groups may not be loaded yet; use empty map — category names are cosmetic for import
+      const mapped = products.map(p => mapProduct(p, ALL_GROUP_ID, catNameMap, onhandMapRef.current));
+      cache.current.set(ALL_GROUP_ID, mapped);
+      return mapped;
+    } catch {
+      return [...displayItems];
+    }
   }, [displayItems]);
 
   const confirmOrder = useCallback(() => {
@@ -461,5 +484,6 @@ export const useMenuViewModel = (): MenuViewModel => {
     confirmOrder,
     totalItems,
     bulkImport,
+    loadAllItems,
   };
 };

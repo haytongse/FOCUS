@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import { File, Paths } from 'expo-file-system';
 import { MaterialIcons as Icon } from '@expo/vector-icons';
 import AppBar from '../../components/AppBar';
 import { useAlert } from '../../components/AppAlert';
@@ -68,6 +69,7 @@ export interface PaymentInfo {
 
 export interface InvoiceData {
   invoiceNumber: string; invoiceDate: string; dueDate?: string; status: string;
+  campusCode?: string;
   company: CompanyInfo; customer: CustomerInfo;
   items: InvoiceLineItem[]; summary: InvoiceSummaryData; payment: PaymentInfo;
   notes?: string; terms?: string; signatureUrl?: string | null;
@@ -139,6 +141,9 @@ const fetchBase64 = async (url: string): Promise<string | null> => {
 
 export const buildModernInvoiceHTML = (data: InvoiceData): string => {
   const { company, customer, items, summary, payment } = data;
+  const docTitle = data.campusCode
+    ? `${data.campusCode}-${data.invoiceNumber}`
+    : data.invoiceNumber;
 
   const statusClass  =
     data.status.toLowerCase() === 'paid'      ? 'status-paid'      :
@@ -193,7 +198,7 @@ export const buildModernInvoiceHTML = (data: InvoiceData): string => {
       <div class="tbl-cell tc-amt r bold">${fmtMoney(it.totalCents)}</div>
     </div>`;
     }).join('');
-    const wrap = `<div class="tbl-wrap">${colHdr}${rows}</div>`;
+    const wrap = `<div class="tbl-wrap">${gi === 0 ? colHdr : ''}${rows}</div>`;
     return gi === 0 ? wrap : `<div class="pg-break"></div>${wrap}`;
   }).join('');
 
@@ -202,6 +207,7 @@ export const buildModernInvoiceHTML = (data: InvoiceData): string => {
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=794,initial-scale=1.0"/>
+<title>${docTitle}</title>
 <style>
   @page { size:A4 portrait; margin:0; }
   *,*::before,*::after {
@@ -254,7 +260,7 @@ export const buildModernInvoiceHTML = (data: InvoiceData): string => {
     border-bottom:2px solid #546E7A;
   }
   .irow { display:flex; gap:6px; margin-bottom:4px; align-items:baseline; }
-  .ilbl { font-size:9.5px; color:#9E9E9E; font-weight:600; width:80px; flex-shrink:0; }
+  .ilbl { font-size:9.5px; color:#000; font-weight:600; width:80px; flex-shrink:0; }
   .ival { font-size:11px; font-weight:600; color:#212121; font-variant-numeric:tabular-nums lining-nums; }
   .status-issued    { background:#E3F2FD; color:#1565C0; padding:2px 10px; border-radius:10px; font-size:10px; font-weight:700; }
   .status-paid      { background:#E8F5E9; color:#2E7D32; padding:2px 10px; border-radius:10px; font-size:10px; font-weight:700; }
@@ -325,7 +331,7 @@ export const buildModernInvoiceHTML = (data: InvoiceData): string => {
   .sum-v { font-weight:700; }
 
   /* ── Bottom Section ── */
-  .bottom-row { display:flex; gap:14px; margin-top:16px; margin-bottom:18px; page-break-before:always; break-before:always; page-break-inside:avoid; break-inside:avoid; }
+  .bottom-row { display:flex; gap:14px; margin-top:16px; margin-bottom:18px; }
 
   .pay-card { flex:1; border:1px solid #EEE; border-radius:10px; overflow:hidden; }
   .pay-hdr  {
@@ -406,6 +412,7 @@ export const buildModernInvoiceHTML = (data: InvoiceData): string => {
 
   <!-- Items Table: one tbl-wrap per page, pg-break sits outside between them -->
   ${itemGroups}
+
   <!-- Summary -->
   <div class="sum-box">
     <div class="sum-row sub">
@@ -479,6 +486,9 @@ export const buildModernInvoiceHTML = (data: InvoiceData): string => {
 
 export const buildPDFInvoiceHTML = (data: InvoiceData): string => {
   const { company, customer, items, summary, payment } = data;
+  const docTitle = data.campusCode
+    ? `${data.campusCode}-${data.invoiceNumber}`
+    : data.invoiceNumber;
 
   const statusClass  =
     data.status.toLowerCase() === 'paid'      ? 'status-paid'      :
@@ -529,7 +539,7 @@ export const buildPDFInvoiceHTML = (data: InvoiceData): string => {
       <div class="tbl-cell tc-amt r bold">${fmtMoney(it.totalCents)}</div>
     </div>`;
     }).join('');
-    const wrap = `<div class="tbl-wrap">${colHdr}${rows}</div>`;
+    const wrap = `<div class="tbl-wrap">${gi === 0 ? colHdr : ''}${rows}</div>`;
     return gi === 0 ? wrap : `<div class="pg-break"></div>${wrap}`;
   }).join('');
 
@@ -538,6 +548,7 @@ export const buildPDFInvoiceHTML = (data: InvoiceData): string => {
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=794,initial-scale=1.0"/>
+<title>${docTitle}</title>
 <style>
   @page { size:A4 portrait; margin:0; }
   *,*::before,*::after {
@@ -590,7 +601,7 @@ export const buildPDFInvoiceHTML = (data: InvoiceData): string => {
     border-bottom:2px solid #546E7A;
   }
   .irow { display:flex; gap:6px; margin-bottom:4px; align-items:baseline; }
-  .ilbl { font-size:9.5px; color:#9E9E9E; font-weight:600; width:80px; flex-shrink:0; }
+  .ilbl { font-size:9.5px; color:#000; font-weight:600; width:80px; flex-shrink:0; }
   .ival { font-size:11px; font-weight:600; color:#212121; font-variant-numeric:tabular-nums lining-nums; }
   .status-issued    { background:#E3F2FD; color:#1565C0; padding:2px 10px; border-radius:10px; font-size:10px; font-weight:700; }
   .status-paid      { background:#E8F5E9; color:#2E7D32; padding:2px 10px; border-radius:10px; font-size:10px; font-weight:700; }
@@ -661,7 +672,7 @@ export const buildPDFInvoiceHTML = (data: InvoiceData): string => {
   .sum-v { font-weight:700; }
 
   /* ── Bottom Section ── */
-  .bottom-row { display:flex; gap:14px; margin-top:16px; margin-bottom:18px; page-break-before:always; break-before:always; page-break-inside:avoid; break-inside:avoid; }
+  .bottom-row { display:flex; gap:14px; margin-top:16px; margin-bottom:18px; }
 
   .pay-card { flex:1; border:1px solid #EEE; border-radius:10px; overflow:hidden; }
   .pay-hdr  {
@@ -742,6 +753,7 @@ export const buildPDFInvoiceHTML = (data: InvoiceData): string => {
 
   <!-- Items Table -->
   ${itemGroups}
+
   <!-- Summary -->
   <div class="sum-box">
     <div class="sum-row sub">
@@ -1082,11 +1094,13 @@ const SaleOrderInvoiceScreen: React.FC<Props> = ({ orderId, onBack }) => {
         const sigUrl = dos.find(d => d.soId === orderId)?.signatureUrl ?? null;
         const sigData = sigUrl ? await fetchBase64(sigUrl) : null;
 
+        const campusCode = order.campusCode ?? order.campus?.campusCode ?? '';
         const campusName = String(order.campusId ?? '');
         const customerOrg = order.customerOrg ?? order.org;
 
         setInvoiceData({
           invoiceNumber: order.referenceNumber ?? order.ref ?? order.id,
+          campusCode,
           invoiceDate:   order.orderDate ?? order.createdAt,
           status:        order.status ?? 'DRAFT',
           company:       COMPANY_INFO,
@@ -1126,10 +1140,13 @@ const SaleOrderInvoiceScreen: React.FC<Props> = ({ orderId, onBack }) => {
     if (!invoiceData) return;
     try {
       setExportingPDF(true);
-      const fileName = `INV-${invoiceData.invoiceNumber.replace(/[^a-zA-Z0-9]/g, '-')}-${Date.now()}`;
+      const invNum = invoiceData.invoiceNumber.replace(/[^a-zA-Z0-9]/g, '-');
+      const fileName = invoiceData.campusCode ? `${invoiceData.campusCode}-${invNum}` : invNum;
       const result = await Print.printToFileAsync({ html: buildPDFInvoiceHTML(invoiceData), width: 794, height: 1123 });
+      const destFile = new File(Paths.cache, `${fileName}.pdf`);
+      new File(result.uri).copy(destFile);
       const canShare = await Sharing.isAvailableAsync();
-      if (canShare) await Sharing.shareAsync(result.uri, { mimeType: 'application/pdf', dialogTitle: `Invoice ${invoiceData.invoiceNumber}` });
+      if (canShare) await Sharing.shareAsync(destFile.uri, { mimeType: 'application/pdf', dialogTitle: fileName });
     } catch (e: any) {
       if (e?.message !== 'User cancelled') {
         showAlert({ type: 'error', title: 'Export Error', message: e?.message ?? 'Failed to export PDF' });
@@ -1143,10 +1160,13 @@ const SaleOrderInvoiceScreen: React.FC<Props> = ({ orderId, onBack }) => {
     if (!invoiceData) return;
     try {
       setSharingTelegram(true);
-      const fileName = `INV-${invoiceData.invoiceNumber.replace(/[^a-zA-Z0-9]/g, '-')}-${Date.now()}`;
+      const invNum = invoiceData.invoiceNumber.replace(/[^a-zA-Z0-9]/g, '-');
+      const fileName = invoiceData.campusCode ? `${invoiceData.campusCode}-${invNum}` : invNum;
       const result = await Print.printToFileAsync({ html: buildPDFInvoiceHTML(invoiceData), width: 794, height: 1123 });
+      const destFile = new File(Paths.cache, `${fileName}.pdf`);
+      new File(result.uri).copy(destFile);
       const canShare = await Sharing.isAvailableAsync();
-      if (canShare) await Sharing.shareAsync(result.uri, { mimeType: 'application/pdf', dialogTitle: `Invoice ${invoiceData.invoiceNumber}` });
+      if (canShare) await Sharing.shareAsync(destFile.uri, { mimeType: 'application/pdf', dialogTitle: fileName });
     } catch (e: any) {
       if (e?.message !== 'User cancelled') {
         showAlert({ type: 'error', title: 'Telegram Error', message: e?.message ?? 'Failed to share to Telegram' });

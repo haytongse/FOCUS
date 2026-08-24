@@ -12,7 +12,9 @@ import {
   setAuthUser,
   restoreAuthUser,
   setOnUnauthorized,
+  updateFcmTokenApi,
 } from '../services/focusApi';
+import { getFcmToken } from '../services/fcmService';
 
 type AppScreen = 'splash' | 'login' | 'main';
 
@@ -32,6 +34,13 @@ const AppNavigator: React.FC = () => {
       setToken(savedToken);
       if (savedUser) setUser(savedUser as User);
       setScreen('main');
+      // Refresh FCM token on the backend so real-device token is always current
+      getFcmToken().then(token => {
+        if (!token) return;
+        setFcmToken(token);
+        const email = (savedUser as User | null)?.email;
+        if (email) updateFcmTokenApi(email, token).catch(() => {});
+      });
     } else {
       setScreen('login');
     }

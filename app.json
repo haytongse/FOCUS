@@ -1,10 +1,8 @@
 {
-  "name": "FOCUSAPPLICATION",
-  "displayName": "Focus ERP",
   "expo": {
     "name": "Focus ERP",
     "slug": "focus-erp",
-    "version": "1.0.3",
+    "version": "1.0.7",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -28,11 +26,10 @@
     },
     "updates": {
       "enabled": true,
-      "checkAutomatically": "ON_LOAD",
-      "fallbackToCacheTimeout": 0,
+      "checkAutomatically": "ON_ERROR_RECOVERY",
       "url": "https://u.expo.dev/e179713a-ec70-49fd-888c-fc298cda1225"
     },
-    "runtimeVersion": "1.0.0",
+    "runtimeVersion": "1.0.7",
     "plugins": [
       "expo-updates",
       "@react-native-firebase/app",

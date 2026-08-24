@@ -7,6 +7,7 @@ import {
   StatusBar,
   ActivityIndicator,
   Alert,
+  RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons as Icon } from '@expo/vector-icons';
@@ -17,9 +18,9 @@ import AppInput from '../../components/AppInput';
 import { useAlert } from '../../components/AppAlert';
 import { useProfileViewModel } from '../../viewmodels/useProfileViewModel';
 import { User } from '../../models/User';
-import { getUsersApi, ApiUser } from '../../services/focusApi';
+import { getUsersApi, ApiUser, broadcastPushApi } from '../../services/focusApi';
 import { getFcmToken } from '../../services/fcmService';
-import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -152,6 +153,8 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ user, onLogout, fcmToken:
   const [fcmToken, setFcmToken] = useState<string | null>(propFcmToken ?? null);
   const [fcmLoading, setFcmLoading] = useState(false);
   const [fcmChecked, setFcmChecked] = useState(!!propFcmToken);
+  const [fcmSent, setFcmSent] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const isOwner = user?.role === 'owner';
 
@@ -168,25 +171,15 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ user, onLogout, fcmToken:
     }
   }, [propFcmToken]);
 
+  // Broadcast to all registered devices via POST /api/v1/auth/broadcast-push
   const handleNotificationsPress = async () => {
     setFcmLoading(true);
     try {
-      const { status } = await Notifications.requestPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Please allow notifications in Settings.');
-        return;
-      }
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: 'Focus ERP',
-          body: 'Push notifications are working!',
-          sound: true,
-        },
-        trigger: null, // show immediately
-      });
-    } catch (err: any) {
-      console.warn('[Push] Error:', err?.message ?? err);
-      Alert.alert('Error', err?.message ?? 'Failed to send notification');
+      const result = await broadcastPushApi('FocusLab', 'Hello from FocusLab');
+      const sent = result.results.filter(r => r.sent).length;
+      setFcmSent(sent > 0);
+      setTimeout(() => setFcmSent(false), 3000);
+    } catch {
     } finally {
       setFcmLoading(false);
     }
@@ -212,6 +205,17 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ user, onLogout, fcmToken:
         { label: 'Sign Out', variant: 'danger', onPress: onLogout },
       ],
     });
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await Promise.allSettled([
+      isOwner
+        ? getUsersApi().then(setTeamUsers).catch(err => setTeamError(err?.message ?? 'Failed to load team'))
+        : Promise.resolve(),
+      getFcmToken().then(token => { if (token) setFcmToken(token); }),
+    ]);
+    setRefreshing(false);
   };
 
   return (
@@ -255,6 +259,9 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ user, onLogout, fcmToken:
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 100 }]}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.primary} />
+        }
       >
         {/* Account Details */}
         <AppText style={styles.sectionLabel}>ACCOUNT DETAILS</AppText>
@@ -325,33 +332,41 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ user, onLogout, fcmToken:
             </View>
             <View style={{ flex: 1 }}>
               <AppText style={styles.pushLabel}>Push Notifications</AppText>
-              {fcmToken ? (
-                <AppText style={styles.fcmTokenText} selectable numberOfLines={2}>
-                  {fcmToken}
-                </AppText>
-              ) : (
-                <AppText variant="caption" color="textSecondary" style={{ marginTop: 2 }}>
-                  Not available on this device
-                </AppText>
-              )}
+              <AppText variant="caption" color="textSecondary" style={{ marginTop: 2 }}>
+                {fcmToken ? 'Active on this device' : 'Not available on this device'}
+              </AppText>
             </View>
           </View>
 
+          {/* Broadcast — all users */}
           <TouchableOpacity
-            style={[styles.pushActionBtn, styles.pushActionBtnRefresh]}
+            style={[
+              styles.pushActionBtn,
+              styles.pushActionBtnRefresh,
+              fcmSent && { borderColor: Colors.success, backgroundColor: '#F0FDF4' },
+            ]}
             onPress={handleNotificationsPress}
+            disabled={fcmLoading}
             activeOpacity={0.7}
           >
             {fcmLoading
               ? <ActivityIndicator size="small" color={Colors.primary} />
+              : fcmSent
+              ? <>
+                  <Icon name="check-circle" size={16} color={Colors.success} />
+                  <AppText style={[styles.pushActionBtnText, { color: Colors.success }]}>
+                    Sent
+                  </AppText>
+                </>
               : <>
                   <Icon name="notifications-active" size={16} color={Colors.primary} />
                   <AppText style={[styles.pushActionBtnText, { color: Colors.primary }]}>
-                    Push Notification
+                    Send to All Devices
                   </AppText>
                 </>
             }
           </TouchableOpacity>
+
         </View>
 
         {/* Team — owner only */}
@@ -395,9 +410,10 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ user, onLogout, fcmToken:
         />
 
         <AppText variant="caption" color="textLight" align="center" style={styles.version}>
-          FOCUS v1.0.0 · © 2026
+          FOCUS v{Constants.expoConfig?.version ?? '—'} · © {new Date().getFullYear()}
         </AppText>
       </ScrollView>
+
     </View>
   );
 };
@@ -621,19 +637,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  fcmTokenBox: {
-    paddingHorizontal: 16,
-    paddingBottom: 14,
-    borderTopWidth: 1,
-    borderTopColor: Colors.divider,
-    paddingTop: 10,
-  },
-  fcmTokenText: {
-    fontSize: 11,
-    color: Colors.textSecondary,
-    marginTop: 4,
-    lineHeight: 16,
-  },
 
   // Sign out
   signOutBtn: {
@@ -722,6 +725,7 @@ const styles = StyleSheet.create({
     color: Colors.error,
     textAlign: 'center',
   },
+
 });
 
 export default ProfileScreen;

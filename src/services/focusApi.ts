@@ -183,7 +183,7 @@ export const loginApi = async (
   fcmToken?: string | null,
 ): Promise<{ user: FocusUser; token: string; refreshToken?: string; expiresIn?: number; fcmToken?: string }> => {
   const body: Record<string, any> = { email, password };
-  if (fcmToken) body.fcm_token = fcmToken;
+  if (fcmToken) body.fcmToken = fcmToken;
 
   const { data } = await api.post('/api/v1/auth/login', body);
 
@@ -237,10 +237,76 @@ export const loginApi = async (
   };
 };
 
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+export interface AppNotification {
+  id: number;
+  title: string;
+  body: string;
+  data?: string;
+  readAt: string | null;
+  createdAt: string;
+}
+
+export const getUnreadCountApi = async (): Promise<number> => {
+  const { data } = await api.get('/api/v1/auth/notifications/unread-count');
+  return data?.data?.unread ?? 0;
+};
+
+export const getNotificationsApi = async (): Promise<AppNotification[]> => {
+  const { data } = await api.get('/api/v1/auth/notifications');
+  return data?.data?.items ?? [];
+};
+
+export const markNotificationsReadApi = async (): Promise<void> => {
+  await api.patch('/api/v1/auth/notifications/mark-read');
+};
+
 // ─── Push Notification ────────────────────────────────────────────────────────
 
-export const sendTestPushApi = async (fcmToken: string): Promise<void> => {
-  await api.post('/api/v1/notifications/test-push', { fcm_token: fcmToken });
+// Register / update FCM token for a specific user (OWNER only)
+export const updateFcmTokenApi = async (email: string, fcmToken: string): Promise<void> => {
+  await api.post('/api/v1/auth/set-fcm-token', { email, fcmToken });
+};
+
+// Send test push to one user by email
+export const sendTestPushApi = async (email: string): Promise<void> => {
+  const { data } = await api.post('/api/v1/auth/test-push', { email });
+  if (data?.ok === false) {
+    throw new Error(data?.error?.messageKey ?? data?.error?.code ?? 'Failed to send test notification');
+  }
+};
+
+export interface BroadcastPushResult {
+  total: number;
+  results: { email: string; sent: boolean; error?: string }[];
+}
+
+// Send to all OWNER + MANAGER users
+export const broadcastPushApi = async (
+  title: string,
+  body: string,
+): Promise<BroadcastPushResult> => {
+  try {
+    const { data } = await api.post('/api/v1/auth/broadcast-push', { title, body });
+    if (data?.ok === false) {
+      throw new Error(data?.error?.messageKey ?? data?.error?.code ?? 'Broadcast failed');
+    }
+    return {
+      total: data?.data?.total ?? 0,
+      results: Array.isArray(data?.data?.results) ? data.data.results : [],
+    };
+  } catch (err: any) {
+    const status: number | undefined = err?.response?.status;
+    const errBody = err?.response?.data;
+    const msg: string =
+      errBody?.error?.messageKey ??
+      errBody?.error?.message ??
+      errBody?.message ??
+      err?.message ??
+      'Broadcast failed';
+    throw new Error(status ? `[${status}] ${msg}` : msg);
+  }
 };
 
 // ─── ERP Left-Menu ────────────────────────────────────────────────────────────
@@ -1007,6 +1073,7 @@ export const createSalesOrderApi = async (input: {
   soDate?: string;
   note?: string;
   receivedBy?: string;
+  referenceNumber?: string;
   items: Array<{
     productId: number;
     qty: number;
@@ -2553,6 +2620,7 @@ export interface CreateQuotationInput {
   customerOrgId: string | number;
   rateUsed?: number;
   note?: string;
+  referenceNumber?: string;
   items: Array<{
     productId: string;
     qty: number;

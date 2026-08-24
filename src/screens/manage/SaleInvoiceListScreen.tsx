@@ -22,6 +22,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons as Icon } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import { File, Paths } from 'expo-file-system';
 
 import Colors from '../../theme/colors';
 import AppText from '../../components/AppText';
@@ -58,7 +59,6 @@ import {
   ApiInvoiceSummary,
   ApiUom,
 } from '../../services/focusApi';
-import { notifyInvoiceCreated } from '../../services/fcmService';
 
 interface Props {
   onBack: () => void;
@@ -283,7 +283,7 @@ const buildPaymentReceiptHTML = (
       <div class="tbl-cell tc-amt r bold">${fmtC(it.total)}</div>
     </div>`;
     }).join('');
-    const wrap = `<div class="tbl-w">${colHdr2}${rows}</div>`;
+    const wrap = `<div class="tbl-w">${gi === 0 ? colHdr2 : ''}${rows}</div>`;
     return gi === 0 ? wrap : `<div class="pg-break"></div>${wrap}`;
   }).join('');
 
@@ -344,7 +344,7 @@ const buildPaymentReceiptHTML = (
   .ichdr  { font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;
             color:#546E7A;padding-bottom:5px;margin-bottom:8px;border-bottom:2px solid #546E7A; }
   .ifield { display:flex;gap:6px;margin-bottom:4px; }
-  .ilbl   { font-size:9.5px;color:#9E9E9E;font-weight:600;width:72px;flex-shrink:0; }
+  .ilbl   { font-size:9.5px;color:#000;font-weight:600;width:72px;flex-shrink:0; }
   .ival   { font-size:11px;font-weight:600;color:#212121; }
   .st-paid { background:#E8F5E9;color:#2E7D32;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700; }
   .tbl-w { border:1px solid #EEE; margin-bottom:0; }
@@ -517,7 +517,50 @@ const buildInvoiceHeaderHTML = (
       <div class="tbl-cell tc-amt r">Amount</div>
     </div>`;
 
-  const itemRows = items.map((it, idx) => `
+  const ROWS_P1  = 14;
+  const ROWS_PN  = 25;
+  const PAGE_H   = 1009;
+  const P1_HDR_H = 280;
+  const COL_H    = 30;
+  const ROW_H    = 26;
+  const SUMM_H   = hasDiscount ? 82 : 60;
+  const FOOTER_H = 240;
+
+  const invGroups = items.length <= ROWS_P1
+    ? [items]
+    : [
+        items.slice(0, ROWS_P1),
+        ...Array.from(
+          { length: Math.ceil((items.length - ROWS_P1) / ROWS_PN) },
+          (_, i) => items.slice(ROWS_P1 + i * ROWS_PN, ROWS_P1 + (i + 1) * ROWS_PN)
+        ),
+      ];
+
+  const lastInvGroup   = invGroups[invGroups.length - 1];
+  const usedOnLastPage = (invGroups.length === 1 ? P1_HDR_H : 0) + COL_H + lastInvGroup.length * ROW_H + SUMM_H;
+  const footerBreak    = (PAGE_H - usedOnLastPage) < FOOTER_H;
+
+  const summaryRows = `
+    <div class="tbl-row sub-row">
+      <div class="tbl-cell tc-grand-lbl">Sub Total</div>
+      <div class="tbl-cell tc-amt r">${fmtC(subtotal)}</div>
+    </div>
+    ${hasDiscount ? `
+    <div class="tbl-row disc-row">
+      <div class="tbl-cell tc-grand-lbl">Discount</div>
+      <div class="tbl-cell tc-amt r">- ${fmtC(discount)}</div>
+    </div>` : ''}
+    <div class="tbl-row grand-row">
+      <div class="tbl-cell tc-grand-lbl">Total</div>
+      <div class="tbl-cell tc-amt r bold">${fmtC(grandTotal)}</div>
+    </div>`;
+
+  const itemGroupsHtml = invGroups.map((grp, gi) => {
+    const start  = invGroups.slice(0, gi).reduce((s, g) => s + g.length, 0);
+    const isLast = gi === invGroups.length - 1;
+    const rows   = grp.map((it, li) => {
+      const idx = start + li;
+      return `
     <div class="tbl-row${idx % 2 === 1 ? ' alt' : ''}">
       <div class="tbl-cell tc-no">${it.no}</div>
       <div class="tbl-cell tc-bar">${it.barcode || '—'}</div>
@@ -529,7 +572,11 @@ const buildInvoiceHeaderHTML = (
       <div class="tbl-cell tc-qty c">${it.qty}</div>
       ${hasDiscount ? `<div class="tbl-cell tc-dis r ${it.dis > 0 ? 'red' : 'muted'}">${it.dis > 0 ? `- ${fmtC(it.dis)}` : '—'}</div>` : ''}
       <div class="tbl-cell tc-amt r bold">${fmtC(it.total)}</div>
-    </div>`).join('');
+    </div>`;
+    }).join('');
+    const tblW = `<div class="tbl-w">${gi === 0 ? colHdr : ''}${rows}${isLast ? summaryRows : ''}</div>`;
+    return gi === 0 ? tblW : `<div class="pg-break"></div>${tblW}`;
+  }).join('');
 
   const scalerWrap = isPreview
     ? `<div style="width:${previewWidth}px;height:${scaledH}px;overflow:hidden;">
@@ -586,7 +633,7 @@ const buildInvoiceHeaderHTML = (
   .ichdr  { font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;
             color:#546E7A;padding-bottom:5px;margin-bottom:8px;border-bottom:2px solid #546E7A; }
   .ifield { display:flex;gap:6px;margin-bottom:4px; }
-  .ilbl   { font-size:9.5px;color:#9E9E9E;font-weight:600;width:72px;flex-shrink:0; }
+  .ilbl   { font-size:9.5px;color:#000;font-weight:600;width:72px;flex-shrink:0; }
   .ival   { font-size:11px;font-weight:600;color:#212121; }
   .st-issued    { background:#E3F2FD;color:#1565C0;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700; }
   .st-paid      { background:#E8F5E9;color:#2E7D32;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700; }
@@ -651,27 +698,6 @@ const buildInvoiceHeaderHTML = (
           padding:9px;font-size:10px;letter-spacing:.4px;margin-top:20px;
           border-top:1px solid #EEE; }
 </style>
-<script>
-(function(){
-  var A4H = 1123;
-  function adjust(){
-    var el = document.getElementById('pay-sig');
-    if(!el) return;
-    var top = el.offsetTop;
-    var h   = el.offsetHeight;
-    var posOnPage = top % A4H;
-    if(posOnPage + h > A4H - 10){
-      el.style.pageBreakBefore = 'always';
-      el.style.breakBefore     = 'page';
-    } else {
-      el.style.pageBreakBefore = '';
-      el.style.breakBefore     = '';
-    }
-  }
-  window.addEventListener('load', adjust);
-  window.onbeforeprint = adjust;
-})();
-</script>
 </head>
 <body>
 ${scalerWrap}
@@ -713,25 +739,11 @@ ${scalerWrap}
   </div>
 
   <!-- Items Table -->
-  <div class="tbl-w">
-    ${colHdr}${itemRows}
-    <div class="tbl-row sub-row">
-      <div class="tbl-cell tc-grand-lbl">Sub Total</div>
-      <div class="tbl-cell tc-amt r">${fmtC(subtotal)}</div>
-    </div>
-    ${hasDiscount ? `
-    <div class="tbl-row disc-row">
-      <div class="tbl-cell tc-grand-lbl">Discount</div>
-      <div class="tbl-cell tc-amt r">- ${fmtC(discount)}</div>
-    </div>` : ''}
-    <div class="tbl-row grand-row">
-      <div class="tbl-cell tc-grand-lbl">Total</div>
-      <div class="tbl-cell tc-amt r bold">${fmtC(grandTotal)}</div>
-    </div>
-  </div>
+  ${itemGroupsHtml}
+  ${footerBreak ? '<div class="pg-break"></div>' : ''}
 
   <!-- Payment + Signature -->
-  <div id="pay-sig">
+  <div id="pay-sig" style="page-break-inside:avoid;break-inside:avoid;">
     <div class="pay-c">
       <div class="pay-h">Payment Information</div>
       <div class="prow"><span class="pl">Bank</span><span class="pv">ABA Bank</span></div>
@@ -909,10 +921,10 @@ const buildInvoiceSummaryHTML = (
 
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"/>
 <style>
-  @page { size: A4 portrait; margin: 15mm; }
+  @page { size: A4 portrait; margin: 8mm 15mm 8mm 15mm; }
   *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   body { font-family: Times,'Times New Roman',serif; font-size: 11px; color: #000; background: #fff; }
-  .page { padding: 20px; min-height: 257mm; display:flex; flex-direction:column; }
+  .page { padding: 8px 20px 8px 20px; }
   .hdr { display:flex; align-items:center; gap:14px; margin-bottom:6px; }
   .logo { width:54px; height:54px; border-radius:10px; overflow:hidden; flex-shrink:0; }
   .logo img { width:54px; height:54px; display:block; }
@@ -927,7 +939,8 @@ const buildInvoiceSummaryHTML = (
   thead tr { background:#EFF6FF; }
   thead th { padding:8px 6px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; border-bottom:1.5px solid #000; border-right:1px solid #d0d0d0; }
   thead th:last-child { border-right:none; }
-  tbody td { padding:7px 6px; font-size:11px; border-bottom:1px solid #e8e8e8; border-right:1px solid #e8e8e8; vertical-align:middle; }
+  tbody tr { height:18px; }
+  tbody td { padding:4px 6px; font-size:11px; border-bottom:1px solid #e8e8e8; border-right:1px solid #e8e8e8; vertical-align:middle; }
   tbody td:last-child { border-right:none; font-weight:700; }
   tbody tr:nth-child(even) { background:#FAFAFA; }
   .c { text-align:center; }
@@ -945,7 +958,7 @@ const buildInvoiceSummaryHTML = (
   .bank-row:last-child { border-bottom:none; }
   .bank-lbl { width:110px; font-size:10px; color:#666; font-weight:600; flex-shrink:0; }
   .bank-val { font-size:10px; font-weight:700; color:#000; }
-  .page-footer { margin-top:auto; padding-top:24px; }
+  .page-footer { margin-top:24px; }
   .sig-section { display:flex; gap:16px; padding-top:8px; }
   .sig-col { flex:1; display:flex; flex-direction:column; align-items:center; gap:6px; }
   .sig-line { width:100%; border-bottom:1.5px solid #000; margin-bottom:4px; height:40px; }
@@ -1916,7 +1929,6 @@ const onRefresh = () => { setRefreshing(true); load(true); };
           const inv = await createInvoiceHeaderApi(payload);
           created.push(inv.invoiceNumber ?? inv.id);
           invoicedSoIds.push(...group.soIds);
-          notifyInvoiceCreated(inv.invoiceNumber ?? inv.id, inv.totalCents, payload.rateUsed);
         } catch (err: any) {
           failed++;
           failedErrors.push(err?.message ?? 'Unknown error');
@@ -2037,11 +2049,16 @@ const handleExportReceiptPDF = async (header: ApiInvoiceHeader) => {
       const html = isPaid
         ? buildPaymentReceiptHTML(full, campusMap, productMap)
         : buildInvoiceHeaderHTML(full, campusMap, productMap, false, undefined, uomMap);
-      const name = `INV-${(header.invoiceNumber ?? header.id).replace(/[^a-zA-Z0-9]/g, '-')}-${Date.now()}`;
+      const campusCode = header.campusCode ?? header.campus?.campusCode ?? campusMap[String(header.campusId)]?.campusCode ?? '';
+      const invoiceNum = (header.invoiceNumber ?? String(header.id)).replace(/[^a-zA-Z0-9\-]/g, '-');
+      const label = campusCode ? `${campusCode}-${invoiceNum}` : invoiceNum;
       const result = await Print.printToFileAsync({ html, width: 794, height: 1123 });
       setExportingInvoiceId(null);
+      const destFile = new File(Paths.cache, `${label}.pdf`);
+      new File(result.uri).copy(destFile);
+      const destUri = destFile.uri;
       const canShare = await Sharing.isAvailableAsync();
-      if (canShare) await Sharing.shareAsync(result.uri, { mimeType: 'application/pdf', dialogTitle: `Invoice ${header.invoiceNumber ?? ''}` });
+      if (canShare) await Sharing.shareAsync(destUri, { mimeType: 'application/pdf', dialogTitle: label });
     } catch (err: any) {
       if (err?.message !== 'User cancelled') {
         showAlert({ type: 'error', title: 'Export Error', message: err?.message ?? 'Failed to export invoice' });
@@ -2059,10 +2076,15 @@ const handleExportReceiptPDF = async (header: ApiInvoiceHeader) => {
       const html = isPaid
         ? buildPaymentReceiptHTML(full, campusMap, productMap)
         : buildInvoiceHeaderHTML(full, campusMap, productMap, false, undefined, uomMap);
-      const name = `INV-${(header.invoiceNumber ?? header.id).replace(/[^a-zA-Z0-9]/g, '-')}-${Date.now()}`;
+      const campusCode = header.campusCode ?? header.campus?.campusCode ?? campusMap[String(header.campusId)]?.campusCode ?? '';
+      const invoiceNum = (header.invoiceNumber ?? String(header.id)).replace(/[^a-zA-Z0-9\-]/g, '-');
+      const label = campusCode ? `${campusCode}-${invoiceNum}` : invoiceNum;
       const result = await Print.printToFileAsync({ html, width: 794, height: 1123 });
+      const destFile = new File(Paths.cache, `${label}.pdf`);
+      new File(result.uri).copy(destFile);
+      const destUri = destFile.uri;
       const canShare = await Sharing.isAvailableAsync();
-      if (canShare) await Sharing.shareAsync(result.uri, { mimeType: 'application/pdf', dialogTitle: `Invoice ${header.invoiceNumber ?? ''}` });
+      if (canShare) await Sharing.shareAsync(destUri, { mimeType: 'application/pdf', dialogTitle: label });
     } catch (err: any) {
       if (err?.message !== 'User cancelled') {
         showAlert({ type: 'error', title: 'Share Error', message: err?.message ?? 'Failed to share invoice' });

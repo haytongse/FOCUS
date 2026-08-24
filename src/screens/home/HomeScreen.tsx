@@ -41,11 +41,16 @@ import {
   getAllProductsApi,
   getCampusesApi,
   getInvoiceHeadersApi,
+  getUnreadCountApi,
+  getNotificationsApi,
+  markNotificationsReadApi,
+  AppNotification,
   ApiSalesOrder,
   ApiCampus,
   ApiProduct,
   ApiInvoiceHeader,
 } from '../../services/focusApi';
+import { getMessaging } from '@react-native-firebase/messaging';
 
 interface HomeScreenProps {
   user: User | null;
@@ -281,6 +286,85 @@ const AnimatedTruckIcon: React.FC = () => {
   );
 };
 
+// ─── Animated Cancel Icon ─────────────────────────────────────────────────────
+
+const AnimatedCancelIcon: React.FC = () => {
+  const shakeX     = useRef(new Animated.Value(0)).current;
+  const crossScale = useRef(new Animated.Value(0.6)).current;
+  const crossOpacity = useRef(new Animated.Value(0)).current;
+  const glowOpacity = useRef(new Animated.Value(0)).current;
+  const pulseScale  = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(shakeX, { toValue: -4, duration: 120, useNativeDriver: true }),
+        Animated.timing(shakeX, { toValue:  4, duration: 120, useNativeDriver: true }),
+        Animated.timing(shakeX, { toValue: -3, duration: 100, useNativeDriver: true }),
+        Animated.timing(shakeX, { toValue:  3, duration: 100, useNativeDriver: true }),
+        Animated.timing(shakeX, { toValue:  0, duration: 100, useNativeDriver: true }),
+        Animated.delay(1200),
+      ]),
+    ).start();
+
+    Animated.sequence([
+      Animated.delay(200),
+      Animated.parallel([
+        Animated.spring(crossScale, { toValue: 1, tension: 80, friction: 6, useNativeDriver: true }),
+        Animated.timing(crossOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+      ]),
+    ]).start(() => {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseScale, { toValue: 1.12, duration: 400, easing: Easing.out(Easing.ease), useNativeDriver: true }),
+          Animated.timing(pulseScale, { toValue: 1.0,  duration: 400, easing: Easing.in(Easing.ease),  useNativeDriver: true }),
+        ]),
+      ).start();
+    });
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowOpacity, { toValue: 0.3, duration: 700, useNativeDriver: true }),
+        Animated.timing(glowOpacity, { toValue: 0,   duration: 700, useNativeDriver: true }),
+      ]),
+    ).start();
+  }, []);
+
+  return (
+    <Animated.View style={{ transform: [{ translateX: shakeX }], width: 100, height: 90, alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
+      {/* Document */}
+      <View style={{ width: 62, height: 74, backgroundColor: '#FFF1F2', borderRadius: 8, borderWidth: 1.5, borderColor: '#FECDD3', padding: 10, justifyContent: 'flex-start', gap: 8 }}>
+        <View style={{ width: '100%', height: 8, backgroundColor: '#EF4444', borderRadius: 3 }} />
+        <View style={{ height: 5, borderRadius: 3, backgroundColor: '#FECACA', width: '90%' }} />
+        <View style={{ height: 5, borderRadius: 3, backgroundColor: '#FECACA', width: '75%' }} />
+        <View style={{ height: 5, borderRadius: 3, backgroundColor: '#FECACA', width: '55%' }} />
+      </View>
+
+      {/* Glow behind badge */}
+      <Animated.View style={{
+        position: 'absolute', bottom: 2, right: 8,
+        width: 30, height: 30, borderRadius: 15,
+        backgroundColor: '#EF4444', opacity: glowOpacity,
+        transform: [{ scale: 1.6 }],
+      }} />
+
+      {/* Cancel badge */}
+      <Animated.View style={{
+        position: 'absolute', bottom: 2, right: 8,
+        width: 26, height: 26, borderRadius: 13,
+        backgroundColor: '#EF4444',
+        alignItems: 'center', justifyContent: 'center',
+        opacity: crossOpacity,
+        transform: [{ scale: crossScale }, { scale: pulseScale }],
+        shadowColor: '#EF4444', shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.4, shadowRadius: 4, elevation: 4,
+      }}>
+        <Icon name="close" size={15} color="#FFFFFF" />
+      </Animated.View>
+    </Animated.View>
+  );
+};
+
 // ─── SO Row (cloned from SaleOrdersListScreen) ────────────────────────────────
 
 const SIG_TYPE_COLOR: Record<string, { bg: string; text: string; label?: string }> = {
@@ -396,6 +480,10 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ user, fcmToken }) => {
   const [sigMap, setSigMap]     = useState<Record<string, Array<{ url: string; type: string; createdAt: string }>>>({});
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState<string | null>(null);
+  const [notifCount, setNotifCount] = useState(0);
+  const [notifVisible, setNotifVisible] = useState(false);
+  const [notifItems, setNotifItems] = useState<AppNotification[]>([]);
+  const [notifLoading, setNotifLoading] = useState(false);
 
   // Convert SO → DO modal state
   const [selectedOrder, setSelectedOrder] = useState<ApiSalesOrder | null>(null);
@@ -407,14 +495,35 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ user, fcmToken }) => {
   const [receivedBy, setReceivedBy]       = useState('');
   const [note, setNote]                   = useState('');
   const [submitting, setSubmitting]       = useState(false);
+  const [cancelling, setCancelling]       = useState(false);
   const [submitError, setSubmitError]     = useState<string | null>(null);
   const [sigUploading, setSigUploading]     = useState(false);
   const [sigUploaded, setSigUploaded]       = useState(false);
   const [sigUploadedUrl, setSigUploadedUrl] = useState<string | null>(null);
   const [hasSig, setHasSig]               = useState(false);
   const [pendingSubmit, setPendingSubmit]   = useState(false);
+  const [pendingCancel, setPendingCancel]   = useState(false);
   const [showEditScreen, setShowEditScreen] = useState(false);
   const sigRef    = useRef<SignaturePadRef>(null);
+
+  const fetchUnreadCount = useCallback(() => {
+    getUnreadCountApi().then(setNotifCount).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetchUnreadCount();
+  }, [fetchUnreadCount]);
+
+  const handleNotifPress = useCallback(async () => {
+    setNotifVisible(true);
+    setNotifLoading(true);
+    try {
+      const items = await getNotificationsApi();
+      setNotifItems(items);
+      setNotifCount(0);
+    } catch { }
+    finally { setNotifLoading(false); }
+  }, []);
 
   const fetchAll = useCallback(() => {
     setLoading(true);
@@ -449,7 +558,14 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ user, fcmToken }) => {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  useEffect(() => tabEvents.on('Home', () => fetchAll()), [fetchAll]);
+  useEffect(() => tabEvents.on('Home', () => { fetchAll(); fetchUnreadCount(); }), [fetchAll, fetchUnreadCount]);
+
+  useEffect(() => {
+    const unsubscribe = getMessaging().onMessage(() => {
+      fetchUnreadCount();
+    });
+    return () => unsubscribe();
+  }, [fetchUnreadCount]);
 
   // Load full order detail (with items + discounts) + product names whenever a modal opens
   useEffect(() => {
@@ -536,7 +652,9 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ user, fcmToken }) => {
     setSigUploadedUrl(null);
     setHasSig(false);
     setPendingSubmit(false);
+    setPendingCancel(false);
     setShowEditScreen(false);
+    setCancelling(false);
     sigRef.current?.clear();
   };
 
@@ -656,6 +774,27 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ user, fcmToken }) => {
     });
   };
 
+  const handleCancelOrder = (order: ApiSalesOrder) => {
+    setPendingCancel(true);
+  };
+
+  const performCancel = async () => {
+    if (!selectedOrder) return;
+    setPendingCancel(false);
+    setCancelling(true);
+    try {
+      await updateSalesOrderStatusApi(selectedOrder.id, 'CANCELLED');
+      setOrders(prev => prev.map(o => o.id === selectedOrder.id ? { ...o, status: 'cancelled' } : o));
+      closeModal();
+      setTimeout(() => fetchAll(), 1500);
+      setTimeout(() => showAlert({ type: 'success', title: 'Order Cancelled', message: 'The order has been cancelled.', autoClose: 2500 }), 300);
+    } catch (err: any) {
+      showAlert({ type: 'error', title: 'Error', message: err?.message ?? 'Failed to cancel order' });
+    } finally {
+      setCancelling(false);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={PRIMARY} />
@@ -672,20 +811,20 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ user, fcmToken }) => {
           <AppText style={{ fontSize: 16, color: '#FFFFFF', fontWeight: '800' }}>
             {user?.name ?? ''}
           </AppText>
-          {fcmToken ? (
-            <TouchableOpacity
-              onPress={() => Alert.alert('FCM Token', fcmToken)}
-              activeOpacity={0.7}
-              style={{ marginTop: 4 }}
-            >
-              <AppText style={{ fontSize: 10, color: 'rgba(255,255,255,0.55)', fontFamily: 'monospace' }}>
-                FCM: {fcmToken.slice(0, 14)}…{fcmToken.slice(-6)}
-              </AppText>
-            </TouchableOpacity>
-          ) : null}
         </View>
-        <TouchableOpacity style={styles.avatar} activeOpacity={0.8}>
-          <Icon name="notifications-none" size={20} color="#FFFFFF" />
+        <TouchableOpacity
+          style={styles.avatar}
+          activeOpacity={0.8}
+          onPress={handleNotifPress}
+        >
+          <Icon name={notifCount > 0 ? 'notifications-active' : 'notifications-none'} size={20} color="#FFFFFF" />
+          {notifCount > 0 && (
+            <View style={styles.notifBadge}>
+              <AppText style={styles.notifBadgeText}>
+                {notifCount > 99 ? '99+' : notifCount}
+              </AppText>
+            </View>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -729,7 +868,9 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ user, fcmToken }) => {
                             <AppText style={styles.kpiChipText}>{campus}</AppText>
                           </View>
                         ) : null}
-                        {customer ? (
+                        {item.note ? (
+                          <AppText style={styles.kpiInvNote} numberOfLines={1}>{item.note}</AppText>
+                        ) : customer ? (
                           <AppText style={styles.kpiMetaText} numberOfLines={1}>{customer}</AppText>
                         ) : null}
                       </View>
@@ -771,18 +912,29 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ user, fcmToken }) => {
 
         {/* SO / DO / RV Toggle */}
         <View style={styles.toggleRow}>
-          {(['SO', 'DO', 'RV'] as const).map(t => (
-            <TouchableOpacity
-              key={t}
-              style={[styles.toggleBtn, docType === t && styles.toggleBtnActive]}
-              onPress={() => setDocType(t)}
-              activeOpacity={0.75}
-            >
-              <AppText style={[styles.toggleLabel, docType === t && styles.toggleLabelActive]}>
-                {t === 'SO' ? 'Sale Order' : t === 'DO' ? 'Delivery' : 'Received'}
-              </AppText>
-            </TouchableOpacity>
-          ))}
+          {(['SO', 'DO', 'RV'] as const).map(t => {
+            const count = t === 'SO' ? filteredSO.length : t === 'DO' ? filteredConfirmed.length : filteredReceived.length;
+            const isActive = docType === t;
+            return (
+              <TouchableOpacity
+                key={t}
+                style={[styles.toggleBtn, isActive && styles.toggleBtnActive]}
+                onPress={() => setDocType(t)}
+                activeOpacity={0.75}
+              >
+                <AppText style={[styles.toggleLabel, isActive && styles.toggleLabelActive]}>
+                  {t === 'SO' ? 'Sale Order' : t === 'DO' ? 'Delivery' : 'Received'}
+                </AppText>
+                {!loading && count > 0 && (
+                  <View style={[styles.toggleCount, isActive && styles.toggleCountActive]}>
+                    <AppText style={[styles.toggleCountText, isActive && styles.toggleCountTextActive]}>
+                      {count}
+                    </AppText>
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
         {/* Summary row */}
@@ -1303,6 +1455,46 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ user, fcmToken }) => {
             </View>
           </Modal>
 
+          {/* Cancel Order Confirmation Modal */}
+          <Modal
+            visible={pendingCancel}
+            transparent
+            animationType="fade"
+            onRequestClose={() => !cancelling && setPendingCancel(false)}
+          >
+            <View style={styles.confirmOverlay}>
+              <View style={styles.confirmCard}>
+                <AnimatedCancelIcon />
+                <AppText variant="h4" align="center" style={styles.confirmTitle}>
+                  Cancel Order
+                </AppText>
+                <AppText style={styles.confirmMsg}>
+                  {`Are you sure you want to cancel order ${selectedOrder?.referenceNumber ?? selectedOrder?.id}? This cannot be undone.`}
+                </AppText>
+                <View style={styles.confirmDivider} />
+                <View style={styles.confirmBtns}>
+                  <AppButton
+                    label="Keep Order"
+                    onPress={() => setPendingCancel(false)}
+                    variant="outline"
+                    size="sm"
+                    style={{ flex: 1 }}
+                    disabled={cancelling}
+                  />
+                  <AppButton
+                    label="Cancel Order"
+                    onPress={performCancel}
+                    variant="danger"
+                    size="sm"
+                    style={{ flex: 1 }}
+                    loading={cancelling}
+                    disabled={cancelling}
+                  />
+                </View>
+              </View>
+            </View>
+          </Modal>
+
           {/* Submit bar — hidden for done (already invoiced/paid/cancelled) */}
           {getFlowType(selectedOrder) !== 'done' && (
           <View style={styles.submitBar}>
@@ -1312,18 +1504,29 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ user, fcmToken }) => {
                 <AppText style={styles.submitErrorText} numberOfLines={2}>{submitError}</AppText>
               </View>
             ) : null}
-            <AppButton
-              label={
-                getFlowType(selectedOrder) === 'confirm' ? 'Confirm Order' :
-                'Mark as Received'
-              }
-              onPress={doSubmit}
-              variant="primary"
-              size="lg"
-              fullWidth
-              loading={submitting}
-              disabled={submitting || (!hasSig && !sigUploadedUrl)}
-            />
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <AppButton
+                label="Cancel Order"
+                onPress={() => selectedOrder && handleCancelOrder(selectedOrder)}
+                variant="danger"
+                size="lg"
+                style={{ flex: 1 }}
+                loading={cancelling}
+                disabled={submitting || cancelling || (!hasSig && !sigUploadedUrl)}
+              />
+              <AppButton
+                label={
+                  getFlowType(selectedOrder) === 'confirm' ? 'Confirm Order' :
+                  'Mark as Received'
+                }
+                onPress={doSubmit}
+                variant="primary"
+                size="lg"
+                style={{ flex: 1 }}
+                loading={submitting}
+                disabled={submitting || cancelling || (!hasSig && !sigUploadedUrl)}
+              />
+            </View>
           </View>
           )}
           {getFlowType(selectedOrder) === 'done' && (() => {
@@ -1350,6 +1553,17 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ user, fcmToken }) => {
                   <AppText style={[styles.completedTitle, isCancelled && { color: '#991B1B' }]}>{title}</AppText>
                 </View>
                 <AppText style={[styles.completedSub, isCancelled && { color: '#B91C1C' }]}>{sub}</AppText>
+                {st === 'received' && selectedOrder && (
+                  <AppButton
+                    label="Cancel Order"
+                    onPress={() => handleCancelOrder(selectedOrder)}
+                    variant="danger"
+                    size="sm"
+                    style={{ marginTop: 4, alignSelf: 'stretch' }}
+                    loading={cancelling}
+                    disabled={cancelling}
+                  />
+                )}
               </View>
             );
           })()}
@@ -1387,6 +1601,53 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ user, fcmToken }) => {
 
         </SafeAreaView>
       </Modal>
+
+      {/* Notification List Modal */}
+      <Modal visible={notifVisible} transparent animationType="slide" onRequestClose={() => setNotifVisible(false)}>
+        <View style={styles.notifOverlay}>
+          <View style={styles.notifSheet}>
+            {/* Header */}
+            <View style={styles.notifHeader}>
+              <AppText style={styles.notifTitle}>Notifications</AppText>
+              <TouchableOpacity onPress={() => setNotifVisible(false)} activeOpacity={0.7}>
+                <Icon name="close" size={22} color={TEXT} />
+              </TouchableOpacity>
+            </View>
+
+            {notifLoading ? (
+              <View style={styles.notifCenter}>
+                <ActivityIndicator size="small" color={PRIMARY} />
+              </View>
+            ) : notifItems.length === 0 ? (
+              <View style={styles.notifCenter}>
+                <Icon name="notifications-none" size={40} color={MUTED} />
+                <AppText style={styles.notifEmpty}>No notifications yet</AppText>
+              </View>
+            ) : (
+              <FlatList
+                data={notifItems}
+                keyExtractor={item => String(item.id)}
+                contentContainerStyle={{ paddingBottom: 24 }}
+                renderItem={({ item }) => (
+                  <View style={[styles.notifItem, item.readAt ? styles.notifItemRead : styles.notifItemUnread]}>
+                    <View style={styles.notifItemLeft}>
+                      <View style={[styles.notifDot, { backgroundColor: item.readAt ? MUTED : PRIMARY }]} />
+                    </View>
+                    <View style={styles.notifItemBody}>
+                      <AppText style={styles.notifItemTitle}>{item.title}</AppText>
+                      <AppText style={styles.notifItemBody2}>{item.body}</AppText>
+                      <AppText style={styles.notifItemTime}>
+                        {new Date(item.createdAt).toLocaleString()}
+                      </AppText>
+                    </View>
+                  </View>
+                )}
+                ItemSeparatorComponent={() => <View style={styles.notifSep} />}
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -1412,6 +1673,15 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25, shadowRadius: 4, elevation: 4,
   },
+  notifBadge: {
+    position: 'absolute', top: -4, right: -4,
+    minWidth: 18, height: 18, borderRadius: 9,
+    backgroundColor: '#EF4444',
+    alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 3,
+    borderWidth: 1.5, borderColor: PRIMARY,
+  },
+  notifBadgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '800', lineHeight: 13 },
   avatarText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
 
   card: {
@@ -1505,6 +1775,7 @@ const styles = StyleSheet.create({
   kpiRowAmt:    { fontSize: 14, fontWeight: '800', color: PURPLE },
   kpiDue:       { fontSize: 10, color: MUTED },
   kpiNote:      { fontSize: 11, color: MUTED, fontStyle: 'italic', marginTop: 1 },
+  kpiInvNote:   { fontSize: 11, color: MUTED, flexShrink: 1 },
   kpiEmpty:     { fontSize: 13, color: MUTED, textAlign: 'center', padding: 20 },
   cardHeader: {
     flexDirection: 'row', alignItems: 'center',
@@ -1518,7 +1789,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', marginHorizontal: 18, marginBottom: 12,
     backgroundColor: '#E0E7FF', borderRadius: 14, padding: 4, gap: 4,
   },
-  toggleBtn:        { flex: 1, paddingVertical: 9, borderRadius: 11, alignItems: 'center' },
+  toggleBtn:        { flex: 1, paddingVertical: 9, borderRadius: 11, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 5 },
   toggleBtnActive:  {
     backgroundColor: PRIMARY,
     shadowColor: PRIMARY, shadowOffset: { width: 0, height: 2 },
@@ -1526,6 +1797,10 @@ const styles = StyleSheet.create({
   },
   toggleLabel:      { fontSize: 13, fontWeight: '700', color: MUTED },
   toggleLabelActive:{ color: '#FFFFFF' },
+  toggleCount:      { backgroundColor: '#C7D2FE', borderRadius: 8, minWidth: 18, paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center' },
+  toggleCountActive:{ backgroundColor: 'rgba(255,255,255,0.3)' },
+  toggleCountText:  { fontSize: 11, fontWeight: '800', color: PRIMARY },
+  toggleCountTextActive: { color: '#FFFFFF' },
 
   summaryRow: {
     flexDirection: 'row', backgroundColor: '#F8FAFF', borderRadius: 16,
@@ -1853,6 +2128,32 @@ const styles = StyleSheet.create({
     fontSize: 13, color: '#047857', textAlign: 'center',
   },
 
+  // Notification modal
+  notifOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end',
+  },
+  notifSheet: {
+    backgroundColor: '#FFFFFF', borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    maxHeight: '80%', paddingTop: 4,
+  },
+  notifHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingVertical: 16,
+    borderBottomWidth: 1, borderBottomColor: '#E2E8F0',
+  },
+  notifTitle: { fontSize: 16, fontWeight: '700', color: TEXT },
+  notifCenter: { alignItems: 'center', justifyContent: 'center', paddingVertical: 48, gap: 8 },
+  notifEmpty: { fontSize: 14, color: MUTED },
+  notifItem: { flexDirection: 'row', paddingHorizontal: 20, paddingVertical: 14 },
+  notifItemUnread: { backgroundColor: '#EFF6FF' },
+  notifItemRead:   { backgroundColor: '#FFFFFF' },
+  notifItemLeft:   { width: 20, alignItems: 'center', paddingTop: 4 },
+  notifDot:        { width: 8, height: 8, borderRadius: 4 },
+  notifItemBody:   { flex: 1, gap: 2 },
+  notifItemTitle:  { fontSize: 14, fontWeight: '700', color: TEXT },
+  notifItemBody2:  { fontSize: 13, color: MUTED },
+  notifItemTime:   { fontSize: 11, color: MUTED, marginTop: 2 },
+  notifSep:        { height: 1, backgroundColor: '#F1F5F9', marginLeft: 40 },
 });
 
 export default HomeScreen;

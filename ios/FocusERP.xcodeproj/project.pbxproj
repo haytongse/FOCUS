@@ -12,6 +12,7 @@
 		5A4DB4CC7831187EE9E6B694 /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 639E2F1256BCBD4F1FFD8F59 /* ExpoModulesProvider.swift */; };
 		6CF009C2302B670C0015DE24 /* icon.png in Resources */ = {isa = PBXBuildFile; fileRef = 6CF009C1302B670C0015DE24 /* icon.png */; };
 		A1B2C3D4E5F60001A1B2C3D4 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60000A1B2C3D4 /* GoogleService-Info.plist */; };
+		A3C4D5E6F7A80001A3C4D5E6 /* notification_sound.wav in Resources */ = {isa = PBXBuildFile; fileRef = A3C4D5E6F7A80000A3C4D5E6 /* notification_sound.wav */; };
 		A2B3C4D5E6F70001A2B3C4D5 /* FirebaseSetup.m in Sources */ = {isa = PBXBuildFile; fileRef = A2B3C4D5E6F70000A2B3C4D5 /* FirebaseSetup.m */; };
 		A703C16C6BD0D0D1EB07E8AA /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = BE34F0C0D0C998F7EA779BD8 /* PrivacyInfo.xcprivacy */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
@@ -28,6 +29,7 @@
 		6CF009C0302B645A0015DE24 /* FocusERP.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = FocusERP.entitlements; path = FocusERP/FocusERP.entitlements; sourceTree = "<group>"; };
 		6CF009C1302B670C0015DE24 /* icon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = icon.png; sourceTree = "<group>"; };
 		A1B2C3D4E5F60000A1B2C3D4 /* GoogleService-Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = "GoogleService-Info.plist"; path = "FocusERP/GoogleService-Info.plist"; sourceTree = "<group>"; };
+		A3C4D5E6F7A80000A3C4D5E6 /* notification_sound.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; name = notification_sound.wav; path = FocusERP/notification_sound.wav; sourceTree = "<group>"; };
 		A2B3C4D5E6F70000A2B3C4D5 /* FirebaseSetup.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = FirebaseSetup.m; path = FocusERP/FirebaseSetup.m; sourceTree = "<group>"; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = FocusERP/SplashScreen.storyboard; sourceTree = "<group>"; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
@@ -56,6 +58,7 @@
 			children = (
 				A1B2C3D4E5F60000A1B2C3D4 /* GoogleService-Info.plist */,
 				A2B3C4D5E6F70000A2B3C4D5 /* FirebaseSetup.m */,
+				A3C4D5E6F7A80000A3C4D5E6 /* notification_sound.wav */,
 				6CF009C1302B670C0015DE24 /* icon.png */,
 				6CF009C0302B645A0015DE24 /* FocusERP.entitlements */,
 				F11748412D0307B40044C1D9 /* AppDelegate.swift */,
@@ -205,6 +208,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A1B2C3D4E5F60001A1B2C3D4 /* GoogleService-Info.plist in Resources */,
+				A3C4D5E6F7A80001A3C4D5E6 /* notification_sound.wav in Resources */,
 				BB2F792D24A3F905000567C9 /* Expo.plist in Resources */,
 				6CF009C2302B670C0015DE24 /* icon.png in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
@@ -419,21 +423,24 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = FocusERP/FocusERP.entitlements;
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = R889S99239;
+				DEVELOPMENT_TEAM = 2WV3R3Q3U9;
 				ENABLE_BITCODE = NO;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
 					"FB_SONARKIT_ENABLED=1",
 				);
 				INFOPLIST_FILE = FocusERP/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Focus ERP";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.books";
 				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.4;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.5;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -442,9 +449,14 @@
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
 				PRODUCT_BUNDLE_IDENTIFIER = in.focuslab.stafferp;
 				PRODUCT_NAME = FocusERP;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_OBJC_BRIDGING_HEADER = "FocusERP/FocusERP-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
 				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Debug;
@@ -456,16 +468,20 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = FocusERP/FocusERP.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = R889S99239;
+				DEVELOPMENT_TEAM = 2WV3R3Q3U9;
 				INFOPLIST_FILE = FocusERP/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Focus ERP";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.books";
 				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.4;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.5;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -474,8 +490,14 @@
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
 				PRODUCT_BUNDLE_IDENTIFIER = in.focuslab.stafferp;
 				PRODUCT_NAME = FocusERP;
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_OBJC_BRIDGING_HEADER = "FocusERP/FocusERP-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
 				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Release;

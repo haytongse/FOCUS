@@ -15,6 +15,7 @@ import {
   Animated,
   Easing,
   Alert,
+  Switch,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useAlert } from '../../components/AppAlert';
@@ -32,11 +33,10 @@ import { useMenuViewModel } from '../../viewmodels/useMenuViewModel';
 import { MenuItemModel } from '../../models/MenuItem';
 import { SaleOrderLine } from '../../models/SaleOrder';
 import { tabEvents } from '../../navigation/tabEvents';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
-import { createSalesOrderApi, getSalesOrderApi, uploadDirectApi, uploadSaleOrderSignatureApi, getOrgId, createQuotationApi, updateSalesOrderStatusApi, createInvoiceHeaderApi, getLocationsApi, ApiLocation } from '../../services/focusApi';
-import { notifyInvoiceCreated } from '../../services/fcmService';
+import { createSalesOrderApi, getSalesOrderApi, uploadDirectApi, uploadSaleOrderSignatureApi, getOrgId, createQuotationApi, updateSalesOrderStatusApi, createInvoiceHeaderApi, getLocationsApi, broadcastPushApi, ApiLocation } from '../../services/focusApi';
 import { User } from '../../models/User';
 
 // ─── Animated Confirm Icon ────────────────────────────────────────────────────
@@ -506,7 +506,7 @@ const MenuScreen: React.FC<{ user?: User | null }> = ({ user }) => {
   const vm = useMenuViewModel();
   const isOwner = user?.role === 'owner';
   const { showAlert } = useAlert();
-  const { bottom: bottomInset } = useSafeAreaInsets();
+  const { bottom: bottomInset, top: topInset } = useSafeAreaInsets();
   const [imageCacheBuster] = useState(() => Date.now());
   const [refreshing, setRefreshing] = useState(false);
 
@@ -524,6 +524,7 @@ const MenuScreen: React.FC<{ user?: User | null }> = ({ user }) => {
   const [invDueAt, setInvDueAt]                   = useState<Date | null>(null);
   const [invDatePickerFor, setInvDatePickerFor]   = useState<'issued' | 'due' | null>(null);
   const [discounts, setDiscounts]                 = useState<Record<string, string>>({});
+  const [prices, setPrices]                       = useState<Record<string, string>>({});
   const [submitting, setSubmitting]               = useState(false);
   const [submitError, setSubmitError]             = useState<string | null>(null);
   const scrollRef                                  = useRef<ScrollView>(null);
@@ -555,7 +556,11 @@ const MenuScreen: React.FC<{ user?: User | null }> = ({ user }) => {
   };
   const [importVisible, setImportVisible] = useState(false);
   const [importRows, setImportRows] = useState<Array<{ barcode: string; qty: string; discount: string }>>([{ barcode: '', qty: '', discount: '' }]);
+  const [importAllItems, setImportAllItems] = useState(vm.displayItems);
+  const [importLoading, setImportLoading] = useState(false);
   const pendingImportDiscountsRef = useRef<Record<string, string>>({});
+  const [autoNumber, setAutoNumber] = useState(true);
+  const [refNumber, setRefNumber] = useState('');
   const bottomPadding = TAB_BAR_HEIGHT + bottomInset;
   const [locations, setLocations] = useState<ApiLocation[]>([]);
   const [selectedLocationId, setSelectedLocationId] = useState<string | number | null>(null);
@@ -590,10 +595,15 @@ const MenuScreen: React.FC<{ user?: User | null }> = ({ user }) => {
   }, [vm.order.lines]);
 
   const totalDiscount = vm.order.lines.reduce((sum, line) => {
+    const effectivePrice = parseFloat(prices[line.id] || '') || line.unitPrice;
     const pct = parseFloat(discounts[line.id] || '0') || 0;
-    return sum + line.subtotal * pct / 100;
+    return sum + effectivePrice * line.quantity * pct / 100;
   }, 0);
-  const finalTotal = Math.max(0, vm.order.total - totalDiscount);
+  const effectiveSubtotal = vm.order.lines.reduce((sum, line) => {
+    const effectivePrice = parseFloat(prices[line.id] || '') || line.unitPrice;
+    return sum + effectivePrice * line.quantity;
+  }, 0);
+  const finalTotal = Math.max(0, effectiveSubtotal - totalDiscount);
 
   // Invoice qty/discount edits are restricted to the Owner role
   const lineEditLocked = docType === 'INV' && !isOwner;
@@ -645,14 +655,16 @@ const MenuScreen: React.FC<{ user?: User | null }> = ({ user }) => {
         return;
       }
 
-      const lineItems = vm.order.lines.map(line => ({
-        productId:      Number(line.item.id),
-        qty:            line.quantity,
-        unitPriceCents: Math.round(line.unitPrice * 100),
-        discountCents:  Math.round(
-          line.quantity * line.unitPrice * 100 * (parseFloat(discounts[line.id] || '0') || 0) / 100
-        ),
-      }));
+      const lineItems = vm.order.lines.map(line => {
+        const effectivePrice = parseFloat(prices[line.id] || '') || line.unitPrice;
+        const discountPct    = parseFloat(discounts[line.id] || '0') || 0;
+        return {
+          productId:      Number(line.item.id),
+          qty:            line.quantity,
+          unitPriceCents: Math.round(effectivePrice * 100),
+          discountCents:  Math.round(line.quantity * effectivePrice * 100 * discountPct / 100),
+        };
+      });
 
       const locationId = selectedLocationId != null ? Number(selectedLocationId) : undefined;
 
@@ -663,6 +675,7 @@ const MenuScreen: React.FC<{ user?: User | null }> = ({ user }) => {
           customerOrgId,
           note: note.trim() || undefined,
           items: lineItems,
+          referenceNumber: !autoNumber && refNumber.trim() ? refNumber.trim() : undefined,
         };
         const quot = await createQuotationApi(quoPayload);
         const quotRef = quot?.referenceNumber ?? quot?.ref ?? quot?.id;
@@ -671,6 +684,7 @@ const MenuScreen: React.FC<{ user?: User | null }> = ({ user }) => {
         setConfirmFormVisible(false);
         setNote('');
         setDiscounts({});
+        setPrices({});
         setSelectedLocationId(null);
         setTimeout(() => {
           showAlert({ type: 'success', title: 'Quotation Created', message: quotRef ? `Reference: ${quotRef}` : 'Quotation created successfully.', autoClose: 2500 });
@@ -688,6 +702,7 @@ const MenuScreen: React.FC<{ user?: User | null }> = ({ user }) => {
           note: note.trim() || undefined,
           receivedBy: receivedBy.trim() || undefined,
           items: lineItems,
+          referenceNumber: !autoNumber && refNumber.trim() ? refNumber.trim() : undefined,
         };
         const so = await createSalesOrderApi(invSoPayload);
 
@@ -709,7 +724,7 @@ const MenuScreen: React.FC<{ user?: User | null }> = ({ user }) => {
           dueAt: invDueAt ? formatOrderDate(invDueAt) : undefined,
         };
         const inv = await createInvoiceHeaderApi(invPayload);
-        notifyInvoiceCreated(inv.invoiceNumber ?? inv.id, inv.totalCents, invPayload.rateUsed);
+        const soRef = so.referenceNumber ?? so.ref ?? so.orderNumber;
 
         // Upload signature (non-fatal)
         try {
@@ -728,11 +743,19 @@ const MenuScreen: React.FC<{ user?: User | null }> = ({ user }) => {
         setConfirmFormVisible(false);
         setNote('');
         setDiscounts({});
+        setPrices({});
         setSigUploaded(false);
         setSigUploadedUrl(null);
         setSelectedLocationId(null);
         sigRef.current?.clear();
         const invRef = inv?.invoiceNumber ?? inv?.id;
+        const campusCode = vm.selectedCampus?.code ?? '';
+        const soTotalCents = so.totalCents ?? lineItems.reduce((s, it) => s + it.qty * it.unitPriceCents - (it.discountCents ?? 0), 0);
+        const amountStr = `$${(soTotalCents / 100).toFixed(2)}`;
+        broadcastPushApi(
+          '🧾 New Invoice',
+          `Campus: ${campusCode}  |  Amount: ${amountStr}  |  Invoice: ${invRef ?? so.referenceNumber ?? so.ref ?? so.id}`,
+        ).catch(() => {});
         setTimeout(() => {
           showAlert({ type: 'success', title: 'Invoice Created', message: invRef ? `Invoice: ${invRef}` : 'Invoice created successfully.', autoClose: 2500 });
         }, 400);
@@ -749,6 +772,7 @@ const MenuScreen: React.FC<{ user?: User | null }> = ({ user }) => {
           note: note.trim() || undefined,
           receivedBy: receivedBy.trim() || undefined,
           items: lineItems,
+          referenceNumber: !autoNumber && refNumber.trim() ? refNumber.trim() : undefined,
         };
         const so = await createSalesOrderApi(soPayload);
 
@@ -779,12 +803,20 @@ const MenuScreen: React.FC<{ user?: User | null }> = ({ user }) => {
         setReceivedBy('');
         setNote('');
         setDiscounts({});
+        setPrices({});
         setSigUploaded(false);
         setSigUploadedUrl(null);
         setSelectedLocationId(null);
         sigRef.current?.clear();
         vm.retryLoad();
         const soRef = soDetail.referenceNumber ?? soDetail.ref ?? soId;
+        const campusCode = soDetail.campusCode ?? soDetail.campus?.campusCode ?? vm.selectedCampus?.code ?? '';
+        const soTotalCents = soDetail.totalCents ?? lineItems.reduce((s, it) => s + it.qty * it.unitPriceCents - (it.discountCents ?? 0), 0);
+        const amountStr = `$${(soTotalCents / 100).toFixed(2)}`;
+        broadcastPushApi(
+          '🧾 New Sale Order',
+          `Campus: ${campusCode}  |  Amount: ${amountStr}  |  Ref: ${soRef}`,
+        ).catch(() => {});
         setTimeout(() => {
           showAlert({ type: 'success', title: 'Sale Order Created', message: `Reference: ${soRef}`, autoClose: 2500 });
         }, 400);
@@ -816,6 +848,9 @@ const MenuScreen: React.FC<{ user?: User | null }> = ({ user }) => {
     setInvDueAt(null);
     setHasSig(false);
     setPendingSubmit(false);
+    setAutoNumber(true);
+    setRefNumber('');
+    setPrices({});
   };
 
   const handleChangeCampus = () => {
@@ -926,7 +961,15 @@ const MenuScreen: React.FC<{ user?: User | null }> = ({ user }) => {
             </View>
             <TouchableOpacity
               style={styles.importBtn}
-              onPress={() => { setImportRows([{ barcode: '', qty: '', discount: '' }]); setImportVisible(true); }}
+              onPress={() => {
+                setImportRows([{ barcode: '', qty: '', discount: '' }]);
+                setImportLoading(true);
+                setImportVisible(true);
+                vm.loadAllItems()
+                  .then(setImportAllItems)
+                  .catch(() => {})
+                  .finally(() => setImportLoading(false));
+              }}
               activeOpacity={0.8}
             >
               <Icon name="upload-file" size={18} color={Colors.white} />
@@ -1094,32 +1137,25 @@ const MenuScreen: React.FC<{ user?: User | null }> = ({ user }) => {
         </KeyboardAvoidingView>
       </View>
 
-      {/* ── Import Modal ──────────────────────────────────────────────────────── */}
-      <Modal
-        visible={importVisible}
-        animationType="slide"
-        presentationStyle="formSheet"
-        onRequestClose={() => setImportVisible(false)}
-      >
-        <SafeAreaView style={{ flex: 1, backgroundColor: Colors.background }} edges={['bottom']}>
+      {/* ── Import Screen — absolute overlay avoids iOS DocumentPicker dismissing a native Modal VC ── */}
+      {importVisible && (
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 99, backgroundColor: Colors.background }}>
           <AppBar
             title="Import Items"
             titleAlign="left"
             showBack
             onBack={() => setImportVisible(false)}
             rightActions={
-              <View style={{ flexDirection: 'row', gap: 8 }}>
-                {/* Export template CSV */}
+              <View style={{ flexDirection: 'row', gap: 6 }}>
                 <TouchableOpacity
-                  style={styles.exportTemplateBtn}
+                  style={styles.importActionBtn}
                   onPress={async () => {
-                    // UTF-8 BOM ensures Excel opens without encoding/number corruption
                     const csv = '﻿' + 'Barcode,Qty,Discount\n';
-                    const path = `${FileSystem.cacheDirectory}order-template-${Date.now()}.csv`;
+                    const path = `${FileSystem.cacheDirectory ?? FileSystem.documentDirectory}order-template-${Date.now()}.csv`;
                     try {
                       await FileSystem.writeAsStringAsync(path, csv);
                       const canShare = await Sharing.isAvailableAsync();
-                      if (canShare) await Sharing.shareAsync(path, { mimeType: 'text/csv', dialogTitle: 'Export' });
+                      if (canShare) await Sharing.shareAsync(path, { mimeType: 'text/csv', dialogTitle: 'Export Template' });
                     } catch (err: any) {
                       if (err?.message !== 'User did not share') {
                         showAlert({ type: 'error', title: 'Export Failed', message: err?.message ?? 'Failed to export' });
@@ -1128,39 +1164,41 @@ const MenuScreen: React.FC<{ user?: User | null }> = ({ user }) => {
                   }}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
-                  <Icon name="download" size={18} color={Colors.white} />
-                  <AppText style={styles.exportTemplateBtnText}>Export</AppText>
+                  <Icon name="file-download" size={16} color={Colors.white} />
+                  <AppText style={styles.importActionBtnText}>Template</AppText>
                 </TouchableOpacity>
-                {/* Import from CSV file */}
                 <TouchableOpacity
-                  style={styles.exportTemplateBtn}
+                  style={[styles.importActionBtn, { backgroundColor: 'rgba(16,185,129,0.25)' }]}
                   onPress={async () => {
                     try {
                       const res = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
                       if (res.canceled) return;
                       const fileUri = res.assets[0].uri;
-                      const content = await FileSystem.readAsStringAsync(fileUri);
+                      // Copy to app cache first so readAsStringAsync gets a stable sandbox path
+                      const destUri = `${FileSystem.cacheDirectory ?? FileSystem.documentDirectory}import_${Date.now()}.csv`;
+                      await FileSystem.copyAsync({ from: fileUri, to: destUri });
+                      let content: string;
+                      try {
+                        content = await FileSystem.readAsStringAsync(destUri);
+                      } finally {
+                        FileSystem.deleteAsync(destUri, { idempotent: true }).catch(() => {});
+                      }
                       const lines = content.replace(/^﻿/, '').split('\n').map(l => l.trim()).filter(Boolean);
                       const parsed: Array<{ barcode: string; qty: string; discount: string }> = [];
-                      // Excel may store numeric barcodes as scientific notation (1.23E+12)
-                      // or as formula strings (="1234567890"). Normalize both back to plain strings.
                       const normalizeBarcode = (raw: string): string => {
                         let v = raw.replace(/^﻿/, '').trim().replace(/^=?"?|"?$/g, '').trim();
-                        if (/^[\d.]+[eE][+\-]?\d+$/.test(v)) {
-                          v = String(Math.round(parseFloat(v)));
-                        }
+                        if (/^[\d.]+[eE][+\-]?\d+$/.test(v)) v = String(Math.round(parseFloat(v)));
                         return v;
                       };
                       for (const line of lines) {
                         const cols = line.split(',');
-                        const barcode  = normalizeBarcode(cols[0] ?? '');
-                        const qtyCol   = cols[1]?.trim().replace(/^"|"$/g, '');
-                        const discCol  = cols[2]?.trim().replace(/^"|"$/g, '') ?? '';
+                        const barcode = normalizeBarcode(cols[0] ?? '');
+                        const qtyCol  = cols[1]?.trim().replace(/^"|"$/g, '');
+                        const discCol = cols[2]?.trim().replace(/^"|"$/g, '') ?? '';
                         if (!barcode || barcode.toLowerCase() === 'barcode') continue;
                         const qty = parseInt(qtyCol) || 0;
                         if (qty > 0) {
-                          const disc = parseFloat(discCol) > 0 ? String(parseFloat(discCol)) : '';
-                          parsed.push({ barcode, qty: String(qty), discount: disc });
+                          parsed.push({ barcode, qty: String(qty), discount: parseFloat(discCol) > 0 ? String(parseFloat(discCol)) : '' });
                         }
                       }
                       if (parsed.length === 0) {
@@ -1174,24 +1212,40 @@ const MenuScreen: React.FC<{ user?: User | null }> = ({ user }) => {
                   }}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
-                  <Icon name="upload" size={18} color={Colors.white} />
-                  <AppText style={styles.exportTemplateBtnText}>Import File</AppText>
+                  <Icon name="upload-file" size={16} color={Colors.white} />
+                  <AppText style={styles.importActionBtnText}>CSV</AppText>
                 </TouchableOpacity>
               </View>
             }
           />
+
+          {/* Product load status banner */}
+          {importLoading ? (
+            <View style={styles.importStatusBanner}>
+              <ActivityIndicator size="small" color={Colors.primary} />
+              <AppText style={styles.importStatusText}>Loading products…</AppText>
+            </View>
+          ) : (
+            <View style={[styles.importStatusBanner, styles.importStatusBannerReady]}>
+              <Icon name="check-circle" size={14} color="#10B981" />
+              <AppText style={[styles.importStatusText, { color: '#059669' }]}>
+                {importAllItems.length} products ready
+              </AppText>
+            </View>
+          )}
+
           <FlatList
             style={{ flex: 1 }}
-            contentContainerStyle={{ padding: 16, gap: 8 }}
+            contentContainerStyle={{ padding: 12, paddingBottom: 8 }}
             keyboardShouldPersistTaps="handled"
             data={importRows}
             keyExtractor={(_, idx) => String(idx)}
             ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
             renderItem={({ item: row, index: idx }) => {
               const matched = row.barcode.trim()
-                ? vm.displayItems.find(p => p.sku?.toLowerCase() === row.barcode.toLowerCase().trim())
+                ? importAllItems.find(p => p.sku?.toLowerCase() === row.barcode.toLowerCase().trim())
                 : null;
-              const notFound = row.barcode.trim() && !matched;
+              const notFound = !!(row.barcode.trim() && !matched && !importLoading);
               const qty = parseInt(row.qty) || 0;
               const discPct = parseFloat(row.discount) || 0;
               const price = matched ? matched.price : 0;
@@ -1219,7 +1273,9 @@ const MenuScreen: React.FC<{ user?: User | null }> = ({ user }) => {
                     </TouchableOpacity>
                   </View>
                   {/* Product name */}
-                  {matched ? (
+                  {importLoading && row.barcode.trim() ? (
+                    <ActivityIndicator size="small" color={Colors.textLight} style={{ alignSelf: 'flex-start' }} />
+                  ) : matched ? (
                     <AppText style={styles.importMatchLabel} numberOfLines={1}>
                       {matched.nameKh || matched.name}
                     </AppText>
@@ -1294,15 +1350,15 @@ const MenuScreen: React.FC<{ user?: User | null }> = ({ user }) => {
             }
           />
 
-          {/* Total + Confirm */}
-          <View style={styles.importFooter}>
+          {/* Footer: total + confirm */}
+          <View style={[styles.importFooter, { paddingBottom: 16 + bottomInset }]}>
             {(() => {
               const validRows = importRows.filter(r => {
-                const m = r.barcode.trim() ? vm.displayItems.find(p => p.sku?.toLowerCase() === r.barcode.toLowerCase().trim()) : null;
+                const m = r.barcode.trim() ? importAllItems.find(p => p.sku?.toLowerCase() === r.barcode.toLowerCase().trim()) : null;
                 return m && parseInt(r.qty) > 0;
               });
               const total = validRows.reduce((sum, r) => {
-                const m = vm.displayItems.find(p => p.sku?.toLowerCase() === r.barcode.toLowerCase().trim())!;
+                const m = importAllItems.find(p => p.sku?.toLowerCase() === r.barcode.toLowerCase().trim())!;
                 const disc = parseFloat(r.discount) || 0;
                 return sum + m.price * (parseInt(r.qty) || 0) * (1 - disc / 100);
               }, 0);
@@ -1321,14 +1377,10 @@ const MenuScreen: React.FC<{ user?: User | null }> = ({ user }) => {
                 if (validRows.length === 0) return;
                 const discountBySku: Record<string, string> = {};
                 for (const r of validRows) {
-                  if (r.discount && parseFloat(r.discount) > 0) {
-                    discountBySku[r.barcode.trim()] = r.discount;
-                  }
+                  if (r.discount && parseFloat(r.discount) > 0) discountBySku[r.barcode.trim()] = r.discount;
                 }
-                if (Object.keys(discountBySku).length > 0) {
-                  pendingImportDiscountsRef.current = discountBySku;
-                }
-                const notFound = vm.bulkImport(validRows.map(r => ({ sku: r.barcode.trim(), qty: parseInt(r.qty) || 1 })));
+                if (Object.keys(discountBySku).length > 0) pendingImportDiscountsRef.current = discountBySku;
+                const notFound = vm.bulkImport(validRows.map(r => ({ sku: r.barcode.trim(), qty: parseInt(r.qty) || 1 })), importAllItems);
                 setImportVisible(false);
                 if (notFound.length > 0) {
                   setTimeout(() => showAlert({
@@ -1345,8 +1397,8 @@ const MenuScreen: React.FC<{ user?: User | null }> = ({ user }) => {
               </AppText>
             </TouchableOpacity>
           </View>
-        </SafeAreaView>
-      </Modal>
+        </View>
+      )}
 
       {/* Confirm Order Screen */}
       <Modal
@@ -1377,7 +1429,13 @@ const MenuScreen: React.FC<{ user?: User | null }> = ({ user }) => {
             style={{ flex: 1 }}
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           >
-            <View style={styles.confirmBody}>
+            <View style={{ flex: 1 }}>
+            <ScrollView
+              style={{ flex: 1 }}
+              contentContainerStyle={styles.confirmBody}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
 
               {/* Location — compact horizontal chips */}
               {locations.length > 0 && (
@@ -1400,12 +1458,12 @@ const MenuScreen: React.FC<{ user?: User | null }> = ({ user }) => {
                 </View>
               )}
 
-              {/* Order Items — flex:1 grows to fill available space */}
-              <View style={{ flex: 1, minHeight: 0 }}>
+              {/* Order Items */}
+              <View>
                 <AppText style={styles.sectionLabel}>
                   Order Items ({vm.totalItems})
                 </AppText>
-                <View style={[styles.orderCard, { flex: 1 }]}>
+                <View style={styles.orderCard}>
 
                   {/* Campus header */}
                   {vm.selectedCampus && (
@@ -1423,17 +1481,14 @@ const MenuScreen: React.FC<{ user?: User | null }> = ({ user }) => {
                   {/* Divider */}
                   <View style={styles.orderCardDivider} />
 
-                  {/* Items scroll */}
-                  <ScrollView
-                    keyboardShouldPersistTaps="handled"
-                    showsVerticalScrollIndicator={false}
-                    style={{ flex: 1 }}
-                    contentContainerStyle={{ paddingBottom: 4 }}
-                  >
+                  {/* Items */}
+                  <View>
                 {vm.order.lines.map((line, index) => {
-                  const pct        = parseFloat(discounts[line.id] || '0') || 0;
-                  const itemDiscount = line.subtotal * pct / 100;
-                  const itemFinal    = Math.max(0, line.subtotal - itemDiscount);
+                  const effectivePrice    = parseFloat(prices[line.id] || '') || line.unitPrice;
+                  const effectiveLineTotal = effectivePrice * line.quantity;
+                  const pct              = parseFloat(discounts[line.id] || '0') || 0;
+                  const itemDiscount     = effectiveLineTotal * pct / 100;
+                  const itemFinal        = Math.max(0, effectiveLineTotal - itemDiscount);
                   return (
                     <View key={line.id}>
                       {/* Item row */}
@@ -1473,7 +1528,7 @@ const MenuScreen: React.FC<{ user?: User | null }> = ({ user }) => {
                           {itemDiscount > 0 ? (
                             <>
                               <AppText style={styles.orderItemPriceOld}>
-                                ${line.subtotal.toFixed(2)}
+                                ${effectiveLineTotal.toFixed(2)}
                               </AppText>
                               <AppText style={styles.orderItemPrice}>
                                 ${itemFinal.toFixed(2)}
@@ -1481,11 +1536,11 @@ const MenuScreen: React.FC<{ user?: User | null }> = ({ user }) => {
                             </>
                           ) : (
                             <AppText style={styles.orderItemPrice}>
-                              ${line.subtotal.toFixed(2)}
+                              ${effectiveLineTotal.toFixed(2)}
                             </AppText>
                           )}
                           <AppText style={styles.orderItemUnit}>
-                            ${line.unitPrice.toFixed(2)} × {line.quantity}
+                            ${effectivePrice.toFixed(2)} × {line.quantity}
                           </AppText>
                         </View>
                       </View>
@@ -1506,6 +1561,32 @@ const MenuScreen: React.FC<{ user?: User | null }> = ({ user }) => {
                           onSet={n => vm.setLineQuantity(line.id, n)}
                           disabled={lineEditLocked}
                         />
+                      </View>
+
+                      {/* Price row */}
+                      <View style={styles.itemPriceRow}>
+                        <View style={styles.itemDiscountLeft}>
+                          <Icon name="attach-money" size={13} color={Colors.primary} />
+                          <AppText style={styles.itemPriceLabel}>Price</AppText>
+                        </View>
+                        <View style={styles.itemDiscountRight}>
+                          <View style={[styles.itemPriceInputWrap, lineEditLocked && styles.itemDiscountInputWrapDisabled]}>
+                            <TextInput
+                              style={[styles.itemPriceInput, lineEditLocked && styles.itemDiscountInputDisabled]}
+                              value={prices[line.id] || ''}
+                              onChangeText={v => {
+                                const clean = v.replace(/[^0-9.]/g, '');
+                                setPrices(prev => ({ ...prev, [line.id]: clean }));
+                              }}
+                              editable={!lineEditLocked}
+                              keyboardType="decimal-pad"
+                              placeholder={line.unitPrice.toFixed(2)}
+                              placeholderTextColor={Colors.textLight}
+                              maxLength={10}
+                              selectTextOnFocus
+                            />
+                          </View>
+                        </View>
                       </View>
 
                       {/* Discount row */}
@@ -1546,7 +1627,7 @@ const MenuScreen: React.FC<{ user?: User | null }> = ({ user }) => {
                     </View>
                   );
                 })}
-                </ScrollView>
+                  </View>
 
                 {/* Totals */}
                 <View style={styles.orderCardDivider} />
@@ -1554,7 +1635,7 @@ const MenuScreen: React.FC<{ user?: User | null }> = ({ user }) => {
                   <View style={styles.orderTotalRow}>
                     <AppText style={styles.orderTotalRowLabel}>Subtotal</AppText>
                     <AppText style={styles.orderTotalRowValue}>
-                      ${vm.order.subtotal.toFixed(2)}
+                      ${effectiveSubtotal.toFixed(2)}
                     </AppText>
                   </View>
                   {totalDiscount > 0 && (
@@ -1581,6 +1662,35 @@ const MenuScreen: React.FC<{ user?: User | null }> = ({ user }) => {
 
               {/* Delivery Info / Note — compact single-line inputs */}
               <View style={styles.confirmInfoRow}>
+
+                {/* Reference number toggle */}
+                <View style={styles.refNumberRow}>
+                  <View style={styles.refNumberLeft}>
+                    <Icon name="tag" size={15} color={Colors.primary} />
+                    <AppText style={styles.refNumberLabel}>Ref Number</AppText>
+                  </View>
+                  <View style={styles.refNumberRight}>
+                    <AppText style={styles.refNumberAutoText}>Auto</AppText>
+                    <Switch
+                      value={autoNumber}
+                      onValueChange={setAutoNumber}
+                      trackColor={{ false: Colors.primaryMuted, true: Colors.border }}
+                      thumbColor={autoNumber ? Colors.primary : Colors.textLight}
+                      style={{ transform: [{ scaleX: 0.85 }, { scaleY: 0.85 }] }}
+                    />
+                  </View>
+                </View>
+                {!autoNumber && (
+                  <TextInput
+                    style={styles.refNumberInput}
+                    value={refNumber}
+                    onChangeText={setRefNumber}
+                    placeholder="Enter reference number"
+                    placeholderTextColor={Colors.textLight}
+                    autoCapitalize="characters"
+                    returnKeyType="done"
+                  />
+                )}
 
                 {/* Date picker row — Order Date for SO/QUO, Issue+Due for INV */}
                 {docType !== 'INV' ? (
@@ -1663,70 +1773,71 @@ const MenuScreen: React.FC<{ user?: User | null }> = ({ user }) => {
                 />
               </View>
 
-              {/* Signature — SO and INV only */}
-              {(docType === 'SO' || docType === 'INV') && (
-                <View style={styles.sigCard}>
-                  {/* Header */}
-                  <View style={styles.sigHeader}>
-                    <View style={styles.sigHeaderLeft}>
-                      <Icon name="draw" size={16} color={Colors.primary} />
-                      <AppText style={styles.sigHeaderTitle}>Signature <AppText style={styles.requiredMark}>*</AppText></AppText>
-                    </View>
-                    <View style={styles.sigHeaderActions}>
-                      <TouchableOpacity
-                        onPress={async () => {
-                          if (sigRef.current?.isEmpty()) {
-                            showAlert({ type: 'warning', title: 'No Signature', message: 'Please draw a signature first.' });
-                            return;
-                          }
-                          setSigUploading(true);
-                          try {
-                            const pngDataUrl = await sigRef.current!.toPNG();
-                            const url = await uploadDirectApi({
-                              uri:      pngDataUrl,
-                              type:     'image/png',
-                              fileName: `signature-preview.png`,
-                            });
-                            setSigUploadedUrl(url);
-                            setSigUploaded(true);
-                          } catch (e: any) {
-                            showAlert({ type: 'error', title: 'Upload Failed', message: e?.message ?? 'Could not upload signature' });
-                          } finally {
-                            setSigUploading(false);
-                          }
-                        }}
-                        style={[styles.sigUploadBtn, sigUploaded && styles.sigUploadBtnDone]}
-                        disabled={sigUploading}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      >
-                        {sigUploading
-                          ? <ActivityIndicator size="small" color={sigUploaded ? '#10B981' : Colors.primary} />
-                          : <Icon name={sigUploaded ? 'check-circle' : 'cloud-upload'} size={13} color={sigUploaded ? '#10B981' : Colors.primary} />}
-                        <AppText style={[styles.sigUploadText, sigUploaded && styles.sigUploadTextDone]}>
-                          {sigUploaded ? 'Uploaded' : 'Upload'}
-                        </AppText>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        onPress={() => { sigRef.current?.clear(); setSigUploaded(false); setSigUploadedUrl(null); setHasSig(false); }}
-                        style={styles.sigClearBtn}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      >
-                        <Icon name="refresh" size={13} color={Colors.primary} />
-                        <AppText style={styles.sigClearText}>Clear</AppText>
-                      </TouchableOpacity>
-                    </View>
+            </ScrollView>
+
+            {/* Signature — SO and INV only, fixed below scroll area */}
+            {(docType === 'SO' || docType === 'INV') && (
+              <View style={styles.sigCard}>
+                {/* Header */}
+                <View style={styles.sigHeader}>
+                  <View style={styles.sigHeaderLeft}>
+                    <Icon name="draw" size={16} color={Colors.primary} />
+                    <AppText style={styles.sigHeaderTitle}>Signature <AppText style={styles.requiredMark}>*</AppText></AppText>
                   </View>
-                  {/* Drawing area */}
-                  <View style={styles.sigDrawArea}>
-                    <SignaturePad
-                      ref={sigRef}
-                      style={styles.sigPad}
-                      onDrawEnd={() => setHasSig(true)}
-                    />
+                  <View style={styles.sigHeaderActions}>
+                    <TouchableOpacity
+                      onPress={async () => {
+                        if (sigRef.current?.isEmpty()) {
+                          showAlert({ type: 'warning', title: 'No Signature', message: 'Please draw a signature first.' });
+                          return;
+                        }
+                        setSigUploading(true);
+                        try {
+                          const pngDataUrl = await sigRef.current!.toPNG();
+                          const url = await uploadDirectApi({
+                            uri:      pngDataUrl,
+                            type:     'image/png',
+                            fileName: `signature-preview.png`,
+                          });
+                          setSigUploadedUrl(url);
+                          setSigUploaded(true);
+                        } catch (e: any) {
+                          showAlert({ type: 'error', title: 'Upload Failed', message: e?.message ?? 'Could not upload signature' });
+                        } finally {
+                          setSigUploading(false);
+                        }
+                      }}
+                      style={[styles.sigUploadBtn, sigUploaded && styles.sigUploadBtnDone]}
+                      disabled={sigUploading}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      {sigUploading
+                        ? <ActivityIndicator size="small" color={sigUploaded ? '#10B981' : Colors.primary} />
+                        : <Icon name={sigUploaded ? 'check-circle' : 'cloud-upload'} size={13} color={sigUploaded ? '#10B981' : Colors.primary} />}
+                      <AppText style={[styles.sigUploadText, sigUploaded && styles.sigUploadTextDone]}>
+                        {sigUploaded ? 'Uploaded' : 'Upload'}
+                      </AppText>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => { sigRef.current?.clear(); setSigUploaded(false); setSigUploadedUrl(null); setHasSig(false); }}
+                      style={styles.sigClearBtn}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Icon name="refresh" size={13} color={Colors.primary} />
+                      <AppText style={styles.sigClearText}>Clear</AppText>
+                    </TouchableOpacity>
                   </View>
                 </View>
-              )}
-
+                {/* Drawing area */}
+                <View style={styles.sigDrawArea}>
+                  <SignaturePad
+                    ref={sigRef}
+                    style={styles.sigPad}
+                    onDrawEnd={() => setHasSig(true)}
+                  />
+                </View>
+              </View>
+            )}
             </View>
           </KeyboardAvoidingView>
 
@@ -2386,12 +2497,53 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   confirmBody: {
-    flex: 1,
     padding: 12,
     gap: 10,
   },
   confirmInfoRow: {
     gap: 8,
+  },
+  refNumberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Colors.surface,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  refNumberLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  refNumberLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  refNumberRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  refNumberAutoText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+  },
+  refNumberInput: {
+    backgroundColor: Colors.surface,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: Colors.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.text,
   },
   dateRow: {
     flexDirection: 'row',
@@ -2653,6 +2805,27 @@ const styles = StyleSheet.create({
     color: Colors.textLight,
   },
 
+  // Per-item price row
+  itemPriceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: `${Colors.primary}08`,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    gap: 8,
+  },
+  itemPriceLabel: { fontSize: 12, fontWeight: '600', color: Colors.primary },
+  itemPriceInputWrap: {
+    flexDirection: 'row', alignItems: 'center',
+    borderWidth: 1, borderColor: `${Colors.primary}40`, borderRadius: 8,
+    backgroundColor: Colors.white, paddingHorizontal: 8, paddingVertical: 4,
+  },
+  itemPriceInput: {
+    fontSize: 13, fontWeight: '800', color: Colors.primary,
+    padding: 0, minWidth: 60, textAlign: 'right',
+  },
+
   // Per-item discount row
   itemDiscountRow: {
     flexDirection: 'row',
@@ -2752,15 +2925,13 @@ const styles = StyleSheet.create({
   // Signature card
   sigCard: {
     backgroundColor: Colors.white,
-    borderRadius: 16,
-    borderWidth: 1,
+    borderTopWidth: 1,
     borderColor: Colors.border,
-    marginTop: 4,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.06,
     shadowRadius: 8,
-    elevation: 2,
+    elevation: 4,
   },
   sigHeader: {
     flexDirection: 'row',
@@ -3140,6 +3311,59 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.4,
   },
+  /* ── New import action buttons in AppBar ── */
+  importActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderRadius: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+  importActionBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.white,
+  },
+  /* ── Status banner ── */
+  importStatusBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    backgroundColor: '#EFF6FF',
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  importStatusBannerReady: {
+    backgroundColor: '#ECFDF5',
+    borderBottomColor: '#D1FAE5',
+  },
+  importStatusText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.primary,
+  },
+  importAddRowBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: Colors.primary,
+    borderStyle: 'dashed',
+    marginTop: 8,
+  },
+  importAddRowText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.primary,
+  },
   importCard: {
     backgroundColor: Colors.surface,
     borderRadius: 12,
@@ -3251,24 +3475,6 @@ const styles = StyleSheet.create({
     color: Colors.error,
     fontWeight: '600',
     paddingLeft: 2,
-  },
-  importAddRowBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    alignSelf: 'flex-start',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: Colors.primary,
-    borderStyle: 'dashed',
-    marginTop: 4,
-  },
-  importAddRowText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: Colors.primary,
   },
   importFooter: {
     padding: 16,

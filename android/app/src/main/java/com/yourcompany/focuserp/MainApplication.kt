@@ -1,7 +1,10 @@
 package com.yourcompany.focuserp
 
 import android.app.Application
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.res.Configuration
+import android.os.Build
 
 import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
@@ -27,6 +30,21 @@ class MainApplication : Application(), ReactApplication {
     )
   }
 
+  private fun createNotificationChannel() {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      val channel = NotificationChannel(
+        "focus_channel",
+        "Focus ERP",
+        NotificationManager.IMPORTANCE_HIGH
+      ).apply {
+        description = "Focus ERP push notifications"
+        enableVibration(true)
+      }
+      val manager = getSystemService(NotificationManager::class.java)
+      manager.createNotificationChannel(channel)
+    }
+  }
+
   override fun onCreate() {
     super.onCreate()
     DefaultNewArchitectureEntryPoint.releaseLevel = try {
@@ -36,6 +54,7 @@ class MainApplication : Application(), ReactApplication {
     }
     loadReactNative(this)
     ApplicationLifecycleDispatcher.onApplicationCreate(this)
+    createNotificationChannel()
   }
 
   override fun onConfigurationChanged(newConfig: Configuration) {

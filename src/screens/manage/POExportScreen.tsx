@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons as Icon } from '@expo/vector-icons';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const XLSX = require('xlsx-js-style');
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const JSZip = require('jszip');

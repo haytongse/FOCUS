@@ -5,21 +5,26 @@ import AppNavigator from './src/navigation/AppNavigator';
 import { AlertProvider } from './src/components/AppAlert';
 import Colors from './src/theme/colors';
 import { requestNotificationPermission } from './src/services/fcmService';
-import * as Notifications from 'expo-notifications';
+import * as Updates from 'expo-updates';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+async function checkForOTAUpdate() {
+  try {
+    const update = await Updates.checkForUpdateAsync();
+    if (update.isAvailable) {
+      await Updates.fetchUpdateAsync();
+      await Updates.reloadAsync();
+    }
+  } catch {
+    // silent — dev builds or no network
+  }
+}
 
 function App() {
   useEffect(() => {
     requestNotificationPermission();
+    if (!__DEV__) {
+      checkForOTAUpdate();
+    }
   }, []);
 
   return (

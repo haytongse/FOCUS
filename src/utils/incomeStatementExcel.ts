@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
 const XLSX   = require('xlsx-js-style');
 const JSZip  = require('jszip');
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import LOGO_BASE64 from '../logo/logoBase64';
 import {
