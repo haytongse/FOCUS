@@ -269,6 +269,11 @@ export const updateFcmTokenApi = async (email: string, fcmToken: string): Promis
   await api.post('/api/v1/auth/set-fcm-token', { email, fcmToken });
 };
 
+// Refresh the current user's FCM token via Bearer auth (call on app start if token changed)
+export const refreshFcmTokenApi = async (fcmToken: string): Promise<void> => {
+  await api.post('/api/v1/auth/fcm-token', { fcmToken });
+};
+
 // Send test push to one user by email
 export const sendTestPushApi = async (email: string): Promise<void> => {
   const { data } = await api.post('/api/v1/auth/test-push', { email });

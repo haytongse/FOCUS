@@ -1,4 +1,4 @@
-type Listener = () => void;
+type Listener = (data?: any) => void;
 const listeners: Record<string, Listener[]> = {};
 
 export const tabEvents = {
@@ -9,7 +9,7 @@ export const tabEvents = {
       listeners[tab] = listeners[tab].filter(l => l !== fn);
     };
   },
-  emit(tab: string) {
-    listeners[tab]?.forEach(fn => fn());
+  emit(tab: string, data?: any) {
+    listeners[tab]?.forEach(fn => fn(data));
   },
 };

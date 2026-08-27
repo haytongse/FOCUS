@@ -51,6 +51,9 @@ import {
   ApiInvoiceHeader,
 } from '../../services/focusApi';
 import { getMessaging } from '@react-native-firebase/messaging';
+import { useNavigation } from '@react-navigation/native';
+import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { MainTabParamList } from '../../navigation/types';
 
 interface HomeScreenProps {
   user: User | null;
@@ -470,6 +473,7 @@ const SORow: React.FC<{
 const HomeScreen: React.FC<HomeScreenProps> = ({ user, fcmToken }) => {
   const insets = useSafeAreaInsets();
   const { showAlert, hideAlert } = useAlert();
+  const navigation = useNavigation<BottomTabNavigationProp<MainTabParamList>>();
 
 
   // List state
@@ -524,6 +528,23 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ user, fcmToken }) => {
     } catch { }
     finally { setNotifLoading(false); }
   }, []);
+
+  const handleNotifTap = useCallback((item: AppNotification) => {
+    if (!item.data) return;
+    try {
+      const payload = JSON.parse(item.data);
+      const type: string = payload?.type ?? '';
+      if (type.startsWith('po_')) {
+        setNotifVisible(false);
+        navigation.navigate('Manage');
+        tabEvents.emit('ManageNav', { view: 'purchaseOrderList', poId: String(payload?.id ?? '') || undefined });
+      } else if (type === 'so_status_changed') {
+        setNotifVisible(false);
+      } else if (type === 'broadcast') {
+        setNotifVisible(false);
+      }
+    } catch {}
+  }, [navigation]);
 
   const fetchAll = useCallback(() => {
     setLoading(true);
@@ -1629,7 +1650,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ user, fcmToken }) => {
                 keyExtractor={item => String(item.id)}
                 contentContainerStyle={{ paddingBottom: 24 }}
                 renderItem={({ item }) => (
-                  <View style={[styles.notifItem, item.readAt ? styles.notifItemRead : styles.notifItemUnread]}>
+                  <TouchableOpacity
+                    activeOpacity={item.data ? 0.7 : 1}
+                    onPress={() => handleNotifTap(item)}
+                    style={[styles.notifItem, item.readAt ? styles.notifItemRead : styles.notifItemUnread]}
+                  >
                     <View style={styles.notifItemLeft}>
                       <View style={[styles.notifDot, { backgroundColor: item.readAt ? MUTED : PRIMARY }]} />
                     </View>
@@ -1640,7 +1665,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ user, fcmToken }) => {
                         {new Date(item.createdAt).toLocaleString()}
                       </AppText>
                     </View>
-                  </View>
+                  </TouchableOpacity>
                 )}
                 ItemSeparatorComponent={() => <View style={styles.notifSep} />}
               />

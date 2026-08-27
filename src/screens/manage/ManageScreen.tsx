@@ -197,12 +197,22 @@ const ManageScreen: React.FC<ManageScreenProps> = ({ userRole }) => {
   const [view, setView] = useState<ManageView>('hub');
   const viewRef = useRef(view);
   viewRef.current = view;
+  const [initialPoId, setInitialPoId] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     return tabEvents.on('Manage', () => {
       if (viewRef.current !== 'hub') setView('hub');
     });
   }, []);
+
+  useEffect(() => {
+    return tabEvents.on('ManageNav', (data?: { view?: ManageView; poId?: string }) => {
+      if (!data?.view) return;
+      setInitialPoId(data.poId ?? undefined);
+      setView(data.view);
+    });
+  }, []);
+
   const [editCategory, setEditCategory] = useState<ApiCategory | null>(null);
   const [editUser, setEditUser] = useState<ApiUser | null>(null);
   const [editProduct, setEditProduct] = useState<ApiProduct | null>(null);
@@ -458,7 +468,12 @@ const ManageScreen: React.FC<ManageScreenProps> = ({ userRole }) => {
     return <SaleInvoiceListScreen onBack={() => setView('accountReceived')} />;
   }
   if (view === 'purchaseOrderList') {
-    return <PurchaseOrderListScreen onBack={() => setView('purchaseOrder')} />;
+    return (
+      <PurchaseOrderListScreen
+        onBack={() => { setInitialPoId(undefined); setView('purchaseOrder'); }}
+        initialPoId={initialPoId}
+      />
+    );
   }
   if (view === 'movementItems') {
     return <MovementItemsScreen onBack={() => setView('inventoryControl')} />;

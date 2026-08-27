@@ -63,6 +63,7 @@ import {
 
 interface Props {
   onBack: () => void;
+  initialPoId?: string;
 }
 
 const startOfYear = () => { const d = new Date(); d.setMonth(0, 1); d.setHours(0, 0, 0, 0); return d; };
@@ -147,7 +148,7 @@ interface ReceiveRow {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-const PurchaseOrderListScreen: React.FC<Props> = ({ onBack }) => {
+const PurchaseOrderListScreen: React.FC<Props> = ({ onBack, initialPoId }) => {
   const { showAlert } = useAlert();
 
   // ── List state ──────────────────────────────────────────────────────────────
@@ -454,6 +455,17 @@ const PurchaseOrderListScreen: React.FC<Props> = ({ onBack }) => {
     } catch {}
     finally { setDetailLoading(false); }
   };
+
+  // Open a specific PO from a push notification deep-link
+  // Placed after openDetail so the function is in scope
+  useEffect(() => {
+    if (!initialPoId || loading) return;
+    getPurchaseOrderApi(initialPoId)
+      .then(openDetail)
+      .catch(() => {});
+    // openDetail is recreated each render but stable in behaviour
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialPoId, loading]);
 
   const closeDetail = () => {
     setDetailPO(null);
@@ -827,7 +839,7 @@ const PurchaseOrderListScreen: React.FC<Props> = ({ onBack }) => {
       setEditingPO(po);
       setSelectedVendor(vendorObj);
       setSelectedLocation(locationObj);
-      setPoDate(po.created_at ? new Date(po.created_at) : new Date());
+      setPoDate(new Date(po.createdAt ?? po.created_at ?? Date.now()));
       setSelectedCategory(null);
       setDraftItems(
         (po.items ?? []).map(it => ({
@@ -1256,9 +1268,10 @@ const PurchaseOrderListScreen: React.FC<Props> = ({ onBack }) => {
         setSigSaving(true);
         try {
           const png = await sigRef.current!.toPNG();
-          const url = await uploadDirectApi({ uri: png, type: 'image/png', fileName: `sig-po-${Date.now()}.png` });
+          // Upload signature to CDN for record-keeping (not attached to received-images
+          // to avoid triggering a duplicate po_approved push notification)
+          await uploadDirectApi({ uri: png, type: 'image/png', fileName: `sig-po-${Date.now()}.png` });
           await approvePurchaseOrderApi(detailPO.id);
-          try { await addPOReceivedImagesApi(String(detailPO.id), [{ url, note: 'Signature' }]); } catch {}
           closeDetail();
           load(true);
           showAlert({ type: 'success', title: 'Approved', message: `${detailPO.poNumber} has been approved.`, autoClose: 2500 });
@@ -1287,9 +1300,10 @@ const PurchaseOrderListScreen: React.FC<Props> = ({ onBack }) => {
         setSigSaving(true);
         try {
           const png = await sigRef.current!.toPNG();
-          const url = await uploadDirectApi({ uri: png, type: 'image/png', fileName: `sig-po-send-${Date.now()}.png` });
+          // Upload signature to CDN for record-keeping (not attached to received-images
+          // to avoid triggering a duplicate po_sent push notification)
+          await uploadDirectApi({ uri: png, type: 'image/png', fileName: `sig-po-send-${Date.now()}.png` });
           await sendPurchaseOrderApi(detailPO.id);
-          try { await addPOReceivedImagesApi(String(detailPO.id), [{ url, note: 'Signature - Send' }]); } catch {}
           sigRef.current?.clear();
           closeDetail();
           load(true);
@@ -1370,6 +1384,21 @@ const PurchaseOrderListScreen: React.FC<Props> = ({ onBack }) => {
     } catch {} finally { setDetailLoading(false); }
   };
 
+  const openDetailBill = async (po: ApiPurchaseOrder) => {
+    sigRef.current?.clear();
+    setSigEmpty(true);
+    setDetailPO(po);
+    setActionPanel('none');
+    setReceivedImages([]);
+    setDetailLoading(true);
+    try {
+      const full = await getPurchaseOrderApi(po.id);
+      setDetailPO(full);
+      setBillRateUsed(String(full.rateUsed ?? 4000));
+      setActionPanel('bill');
+    } catch {} finally { setDetailLoading(false); }
+  };
+
   const renderCard = ({ item, index }: { item: ApiPurchaseOrder; index: number }) => {
     const s = STATUS[item.status] ?? STATUS.DRAFT;
     const poRef = item.poNumber ?? item.referenceNumber ?? item.ref ?? item.id;
@@ -1384,6 +1413,7 @@ const PurchaseOrderListScreen: React.FC<Props> = ({ onBack }) => {
     const canReceive = item.status === 'SENT';
     const canOpenDetail = item.status !== 'BILLED' && item.status !== 'PAID';
     const isReceived = item.status === 'RECEIVED';
+    const isCompleted = item.status === 'BILLED' || item.status === 'PAID';
 
     const isExpanded = expandedPoId === String(item.id);
     const imgCount = item.imageCount ?? 0;
@@ -1470,9 +1500,24 @@ const PurchaseOrderListScreen: React.FC<Props> = ({ onBack }) => {
           {/* Action row */}
           <View style={styles.cardActionRow}>
             {isReceived ? (
+              <>
+                <View style={styles.completedBadge}>
+                  <Icon name="check-circle" size={14} color="#16A34A" />
+                  <AppText style={styles.completedText}>Status: Completed</AppText>
+                </View>
+                <TouchableOpacity
+                  style={[styles.cardActionBtn, { backgroundColor: '#EDE9FE', borderColor: '#DDD6FE' }]}
+                  onPress={() => openDetailBill(item)}
+                  activeOpacity={0.7}
+                >
+                  <Icon name="receipt" size={13} color="#7C3AED" />
+                  <AppText style={[styles.cardActionText, { color: '#7C3AED' }]}>Record Bill</AppText>
+                </TouchableOpacity>
+              </>
+            ) : isCompleted ? (
               <View style={styles.completedBadge}>
                 <Icon name="check-circle" size={14} color="#16A34A" />
-                <AppText style={styles.completedText}>Status: Completed</AppText>
+                <AppText style={styles.completedText}>Completed</AppText>
               </View>
             ) : (
               <>
@@ -2658,7 +2703,7 @@ const PurchaseOrderListScreen: React.FC<Props> = ({ onBack }) => {
           const isReceived = detailPO.status === 'RECEIVED';
           const isBilled = detailPO.status === 'BILLED' || detailPO.status === 'PARTIAL';
           const hasBill = !!(detailPO.billNo || detailPO.billTotalCents);
-          const canBill = isReceived && !hasBill;
+          const canBill = (isReceived || isSent) && !hasBill;
           const canCancel = isDraft || isApproved;
 
           return (
